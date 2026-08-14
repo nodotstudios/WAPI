@@ -29,6 +29,7 @@ import {
   sendInteractiveList,
   type MediaKind,
 } from '@/lib/whatsapp/meta-api';
+import { sendEvolutionText, sendEvolutionMedia } from '@/lib/whatsapp/evolution-api';
 import {
   validateInteractivePayload,
   interactivePayloadPreviewText,
@@ -407,34 +408,54 @@ export async function sendMessageToConversation(
   // back to the contact so the next send goes straight through.
   let waMessageId = '';
   let workingPhone = sanitizedPhone;
-  try {
-    const variants = phoneVariants(sanitizedPhone);
-    let lastError: unknown = null;
 
-    for (const variant of variants) {
-      try {
-        waMessageId = await attempt(variant);
-        workingPhone = variant;
-        lastError = null;
-        break;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!isRecipientNotAllowedError(message)) {
-          throw err;
-        }
-        lastError = err;
-        console.warn(
-          `[send-message] variant "${variant}" rejected by Meta, trying next…`
-        );
-      }
+  if (config.connection_mode === 'qr_gateway' && config.gateway_url && config.gateway_api_key && config.instance_name) {
+    const evoConfig = {
+      gatewayUrl: config.gateway_url,
+      apiKey: config.gateway_api_key,
+      instanceName: config.instance_name,
+    };
+    let result;
+    if (isMediaKind && mediaUrl) {
+      result = await sendEvolutionMedia(evoConfig, sanitizedPhone, mediaUrl, messageType as any, contentText || undefined);
+    } else {
+      const text = contentText || '';
+      result = await sendEvolutionText(evoConfig, sanitizedPhone, text);
     }
+    if (!result.success) {
+      throw new SendMessageError('gateway_error', result.error || 'QR Gateway send failed', 502);
+    }
+    waMessageId = result.messageId || `evo_${Date.now()}`;
+  } else {
+    try {
+      const variants = phoneVariants(sanitizedPhone);
+      let lastError: unknown = null;
 
-    if (lastError) throw lastError;
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : 'Unknown Meta API error';
-    console.error('[send-message] Meta send failed for all variants:', message);
-    throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
+      for (const variant of variants) {
+        try {
+          waMessageId = await attempt(variant);
+          workingPhone = variant;
+          lastError = null;
+          break;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!isRecipientNotAllowedError(message)) {
+            throw err;
+          }
+          lastError = err;
+          console.warn(
+            `[send-message] variant "${variant}" rejected by Meta, trying next…`
+          );
+        }
+      }
+
+      if (lastError) throw lastError;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unknown Meta API error';
+      console.error('[send-message] Meta send failed for all variants:', message);
+      throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
+    }
   }
 
   if (workingPhone !== sanitizedPhone) {

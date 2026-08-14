@@ -70,6 +70,13 @@ export function WhatsAppConfig() {
   // again and overwrites whatever the user typed but hadn't saved yet.
   const loadedAccountIdRef = useRef<string | null>(null);
 
+  const [connectionMode, setConnectionMode] = useState<'meta_cloud' | 'qr_gateway'>('meta_cloud');
+  const [gatewayUrl, setGatewayUrl] = useState('');
+  const [gatewayApiKey, setGatewayApiKey] = useState('');
+  const [instanceName, setInstanceName] = useState('crm_whatsapp');
+  const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [wabaId, setWabaId] = useState('');
   const [accessToken, setAccessToken] = useState('');
@@ -227,6 +234,42 @@ export function WhatsAppConfig() {
   }
 
   async function handleSave() {
+    if (connectionMode === 'qr_gateway') {
+      if (!gatewayUrl.trim() || !instanceName.trim()) {
+        toast.error('Gateway URL and Instance Name are required');
+        return;
+      }
+      try {
+        setSaving(true);
+        const { error } = await supabase
+          .from('whatsapp_config')
+          .upsert({
+            account_id: accountId,
+            user_id: user?.id,
+            connection_mode: 'qr_gateway',
+            gateway_url: gatewayUrl.trim(),
+            gateway_api_key: gatewayApiKey.trim() || null,
+            instance_name: instanceName.trim(),
+            phone_number_id: `qr_${instanceName.trim()}`,
+            access_token: 'qr_gateway_active',
+            status: 'connected',
+            updated_at: new Date().toISOString(),
+          });
+
+        if (error) {
+          toast.error('Failed to save QR Gateway settings');
+        } else {
+          toast.success('QR Gateway settings saved successfully!');
+          setConnectionStatus('connected');
+        }
+      } catch (err) {
+        toast.error('Error saving settings');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     if (!phoneNumberId.trim()) {
       toast.error('Phone Number ID is required');
       return;
@@ -598,7 +641,151 @@ export function WhatsAppConfig() {
           </Alert>
         )}
 
+        {/* Connection Mode Selector Card */}
+        <Card className="border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-foreground">Connection Method</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Choose how you want to connect your WhatsApp account to the CRM
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setConnectionMode('meta_cloud')}
+                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center ${
+                  connectionMode === 'meta_cloud'
+                    ? 'border-primary bg-primary/10 font-medium text-foreground'
+                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <Zap className="size-6 mb-2 text-primary" />
+                <span className="text-sm font-semibold">Meta Official Cloud API</span>
+                <span className="text-xs text-muted-foreground mt-1">Requires Access Token & Phone Number ID</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setConnectionMode('qr_gateway')}
+                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center ${
+                  connectionMode === 'qr_gateway'
+                    ? 'border-primary bg-primary/10 font-medium text-foreground'
+                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <Eye className="size-6 mb-2 text-emerald-400" />
+                <span className="text-sm font-semibold">Scan QR Code (WhatsApp Web)</span>
+                <span className="text-xs text-muted-foreground mt-1">Scan QR code directly from your phone app</span>
+              </button>
+            </div>
+
+            {/* QR Gateway Section */}
+            {connectionMode === 'qr_gateway' && (
+              <div className="mt-6 pt-6 border-t border-border space-y-4">
+                <Alert className="bg-emerald-950/20 border-emerald-700/40">
+                  <AlertTitle className="text-emerald-300 font-medium flex items-center gap-2">
+                    <CheckCircle2 className="size-4 text-emerald-400" />
+                    WhatsApp Web QR Gateway Active
+                  </AlertTitle>
+                  <AlertDescription className="text-emerald-200/80 text-xs mt-1">
+                    Connect any active WhatsApp number on your phone by scanning the QR code below. No Meta Developer Account required.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-xs">Gateway Server URL</Label>
+                    <Input
+                      placeholder="e.g. http://localhost:8080 or https://evo-api.com"
+                      value={gatewayUrl}
+                      onChange={(e) => setGatewayUrl(e.target.value)}
+                      className="bg-muted border-border text-foreground text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground text-xs">Instance Name</Label>
+                    <Input
+                      placeholder="e.g. crm_whatsapp"
+                      value={instanceName}
+                      onChange={(e) => setInstanceName(e.target.value)}
+                      className="bg-muted border-border text-foreground text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-xs">Gateway API Key</Label>
+                  <Input
+                    type="password"
+                    placeholder="Enter API Key"
+                    value={gatewayApiKey}
+                    onChange={(e) => setGatewayApiKey(e.target.value)}
+                    className="bg-muted border-border text-foreground text-sm"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <Button
+                    type="button"
+                    onClick={async () => {
+                      if (!gatewayUrl || !instanceName) {
+                        toast.error('Please enter Gateway URL and Instance Name');
+                        return;
+                      }
+                      setQrLoading(true);
+                      try {
+                        const res = await fetch(`/api/whatsapp/qr-webhook?gateway_url=${encodeURIComponent(gatewayUrl)}&api_key=${encodeURIComponent(gatewayApiKey)}&instance_name=${encodeURIComponent(instanceName)}`);
+                        const data = await res.json();
+                        if (data.qr_code) {
+                          setQrCodeBase64(data.qr_code);
+                          toast.success('QR Code generated! Scan it with your phone.');
+                        } else if (data.connected) {
+                          toast.success('WhatsApp is already connected!');
+                          setConnectionStatus('connected');
+                        } else {
+                          toast.error(data.error || 'Failed to fetch QR Code');
+                        }
+                      } catch {
+                        toast.error('Failed to reach Gateway server');
+                      } finally {
+                        setQrLoading(false);
+                      }
+                    }}
+                    disabled={qrLoading}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {qrLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : <Eye className="size-4 mr-2" />}
+                    Generate / Refresh QR Code
+                  </Button>
+                </div>
+
+                {/* Render Base64 QR Code */}
+                {qrCodeBase64 && (
+                  <div className="mt-4 p-4 rounded-xl border border-border bg-card flex flex-col items-center justify-center text-center space-y-3">
+                    <p className="text-sm font-semibold text-foreground">Scan with WhatsApp on your phone:</p>
+                    <div className="p-3 bg-white rounded-lg shadow-md">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`}
+                        alt="WhatsApp Pair QR Code"
+                        className="w-56 h-56 object-contain"
+                      />
+                    </div>
+                    <ol className="text-xs text-muted-foreground text-left space-y-1 list-decimal list-inside bg-muted/30 p-3 rounded-lg w-full max-w-sm">
+                      <li>Open **WhatsApp** on your phone</li>
+                      <li>Tap **Settings / Menu (⋮)** → **Linked Devices**</li>
+                      <li>Tap **Link a Device** and scan this QR code</li>
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* API Credentials */}
+        {connectionMode === 'meta_cloud' && (
         <Card>
           <CardHeader>
             <CardTitle className="text-foreground">{t('apiCredentialsTitle')}</CardTitle>
@@ -696,6 +883,7 @@ export function WhatsAppConfig() {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Webhook URL */}
         <Card>
