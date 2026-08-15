@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { QuickReply } from "@/types";
-import { interactivePayloadPreviewText } from "@/lib/whatsapp/interactive";
 
 interface QuickReplyPickerProps {
   open: boolean;
@@ -20,9 +19,7 @@ interface QuickReplyPickerProps {
 }
 
 /**
- * Lists the account's saved quick replies for insertion into the
- * composer. Text snippets fill the textarea; interactive snippets open
- * the builder pre-filled (handled by the caller's `onPick`).
+ * Lists the account's saved quick replies for instant insertion into the composer.
  */
 export function QuickReplyPicker({
   open,
@@ -57,39 +54,39 @@ export function QuickReplyPicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("quickReplies")}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-foreground">
+            <Zap className="size-4 text-primary" />
+            {t("quickReplies")}
+          </DialogTitle>
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[60vh] overflow-y-auto pt-2">
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
             </div>
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {t("quickRepliesEmpty")}
             </p>
           ) : (
-            <ul className="flex flex-col gap-1">
+            <ul className="flex flex-col gap-1.5">
               {items.map((qr) => (
                 <li key={qr.id}>
                   <button
                     type="button"
-                    onClick={() => onPick(qr)}
-                    className="flex w-full items-start gap-2 rounded-md border border-border bg-muted/40 p-2.5 text-left hover:border-primary/50 hover:bg-muted"
+                    onClick={() => {
+                      onPick(qr);
+                      onOpenChange(false);
+                    }}
+                    className="flex w-full items-start gap-2.5 rounded-lg border border-border bg-card p-3 text-left transition-all hover:border-primary/50 hover:bg-muted"
                   >
-                    {qr.kind === "interactive" ? (
-                      <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    ) : (
-                      <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
+                    <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-foreground">
+                      <span className="block truncate text-sm font-semibold text-foreground">
                         {qr.title}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {qr.kind === "interactive" && qr.interactive_payload
-                          ? interactivePayloadPreviewText(qr.interactive_payload)
-                          : qr.content_text}
+                      <span className="block line-clamp-2 text-xs text-muted-foreground mt-0.5">
+                        {qr.content_text}
                       </span>
                     </span>
                   </button>

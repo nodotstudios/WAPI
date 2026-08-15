@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   Send,
-  LayoutTemplate,
   Paperclip,
   Image as ImageIcon,
   Video,
@@ -19,8 +18,6 @@ import {
   X,
   Loader2,
   Sparkles,
-  Plus,
-  MessageSquareDashed,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,13 +28,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useCan } from "@/hooks/use-can";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -48,12 +38,7 @@ import {
 } from "@/lib/storage/upload-media";
 import { ReplyQuote } from "./reply-quote";
 import { useTranslations } from "next-intl";
-import {
-  InteractiveBuilder,
-  blankButtonsPayload,
-} from "@/components/interactive/interactive-builder";
-import { validateInteractivePayload } from "@/lib/whatsapp/interactive";
-import type { InteractiveMessagePayload, QuickReply } from "@/types";
+import type { QuickReply } from "@/types";
 import { QuickReplyPicker } from "./quick-reply-picker";
 
 /** Media content types an agent can send from the composer. */
@@ -114,8 +99,8 @@ interface MessageComposerProps {
   sessionExpired: boolean;
   onSend: (text: string, replyToId?: string) => void;
   onSendMedia: (payload: SendMediaPayload) => void;
-  onSendInteractive: (payload: InteractiveMessagePayload, replyToId?: string) => void;
-  onOpenTemplates: () => void;
+  onSendInteractive?: (payload: any, replyToId?: string) => void;
+  onOpenTemplates?: () => void;
   replyTo?: ReplyDraft | null;
   onClearReply?: () => void;
 }
@@ -148,11 +133,7 @@ export function MessageComposer({
   const [drafting, setDrafting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Interactive-message builder dialog + quick-reply picker.
-  const [interactiveOpen, setInteractiveOpen] = useState(false);
-  const [interactivePayload, setInteractivePayload] =
-    useState<InteractiveMessagePayload>(blankButtonsPayload);
-  const [savingQuickReply, setSavingQuickReply] = useState(false);
+  // Quick-reply picker state.
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
 
   // Media attachment state. `draft` holds an uploaded-but-not-yet-sent
@@ -298,74 +279,11 @@ export function MessageComposer({
     }
   }, [drafting, conversationId, adjustHeight]);
 
-  // ---- Interactive message + quick replies --------------------------
-
-  const openInteractiveBuilder = useCallback(
-    (seed?: InteractiveMessagePayload) => {
-      setInteractivePayload(seed ?? blankButtonsPayload());
-      setInteractiveOpen(true);
-    },
-    [],
-  );
-
-  const sendInteractive = useCallback(() => {
-    const result = validateInteractivePayload(interactivePayload);
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
-    }
-    onSendInteractive(interactivePayload, replyTo?.id);
-    setInteractiveOpen(false);
-    onClearReply?.();
-  }, [interactivePayload, onSendInteractive, replyTo?.id, onClearReply]);
-
-  // Persist the current builder payload as a reusable interactive snippet.
-  const saveAsQuickReply = useCallback(async () => {
-    const result = validateInteractivePayload(interactivePayload);
-    if (!result.ok) {
-      toast.error(result.error);
-      return;
-    }
-    const title = window
-      .prompt(t("quickReplyNamePrompt"))
-      ?.trim();
-    if (!title) return;
-    setSavingQuickReply(true);
-    try {
-      const res = await fetch("/api/quick-replies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          kind: "interactive",
-          interactive_payload: interactivePayload,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error ?? t("quickReplySaveError"));
-        return;
-      }
-      toast.success(t("quickReplySaved"));
-    } catch {
-      toast.error(t("quickReplySaveError"));
-    } finally {
-      setSavingQuickReply(false);
-    }
-  }, [interactivePayload, t]);
-
-  // A picked quick reply: text fills the composer; interactive opens the
-  // builder pre-filled so the agent can tweak before sending.
+  // Quick replies handler: text fills the composer.
   const handlePickQuickReply = useCallback(
     (qr: QuickReply) => {
       setQuickReplyOpen(false);
-      if (qr.kind === "interactive" && qr.interactive_payload) {
-        openInteractiveBuilder(qr.interactive_payload);
-        return;
-      }
       const body = qr.content_text ?? "";
-      // Separate the snippet from any existing draft with a newline so the
-      // words don't run together ("Thanks" + "we'll…" → "Thankswe'll…").
       setText((prev) =>
         prev && !/\s$/.test(prev) ? `${prev}\n${body}` : `${prev}${body}`,
       );
@@ -378,7 +296,7 @@ export function MessageComposer({
         }
       });
     },
-    [openInteractiveBuilder, adjustHeight],
+    [adjustHeight],
   );
 
   // Upload a captured file to chat-media and stage it as a draft.
@@ -546,22 +464,7 @@ export function MessageComposer({
           />
         </div>
       )}
-      {sessionExpired && (
-        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-500/10 px-3 py-2">
-          <p className="text-xs text-amber-400">
-            {t("sessionExpiredHint")}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-amber-400 hover:text-amber-300"
-            onClick={onOpenTemplates}
-          >
-            <LayoutTemplate className="mr-1 h-3 w-3" />
-            {t("templates")}
-          </Button>
-        </div>
-      )}
+
 
       {/* Hidden file inputs driven by the attach menu. */}
       <input
@@ -669,35 +572,17 @@ export function MessageComposer({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* + menu — interactive messages + quick replies. Gated on the
-              24h window like free-form text (interactive requires it). */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={inputsDisabled}
-              title={
-                readOnly
-                  ? t("readOnlyTitle")
-                  : inputsDisabled
-                    ? undefined
-                    : t("moreActions")
-              }
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md p-0 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="border-border bg-popover">
-              <DropdownMenuItem onClick={() => openInteractiveBuilder()}>
-                <MessageSquareDashed className="mr-2 h-4 w-4" />
-                {t("interactiveMessage")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setQuickReplyOpen(true)}>
-                <Zap className="mr-2 h-4 w-4" />
-                {t("quickReplies")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-
+          <GatedButton
+            variant="ghost"
+            size="sm"
+            canAct={!readOnly}
+            gateReason="send messages"
+            title={readOnly ? undefined : "Quick Replies"}
+            className="h-9 w-9 shrink-0 p-0 text-muted-foreground hover:text-primary"
+            onClick={() => setQuickReplyOpen(true)}
+          >
+            <Zap className="h-4 w-4" />
+          </GatedButton>
 
           <GatedButton
             variant="ghost"
@@ -730,9 +615,6 @@ export function MessageComposer({
             }
             disabled={sessionExpired || readOnly}
             rows={1}
-            // Textarea keeps its own inline title — the GatedButton
-            // wrapping pattern doesn't apply to non-button inputs.
-            // The placeholder text also surfaces the read-only state.
             title={readOnly ? t("readOnlyTitle") : undefined}
             className={cn(
               "flex-1 resize-none rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-primary/50",
@@ -748,52 +630,16 @@ export function MessageComposer({
             onClick={handleSend}
             className="h-9 w-9 shrink-0 bg-primary p-0 hover:bg-primary/90 disabled:opacity-40"
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-4 w-4 text-primary-foreground" />
           </GatedButton>
         </div>
       )}
 
-      {/* Hint sits outside the flex row so its height doesn't push
-          `items-end` buttons below the textarea. Indented to line up
-          under the textarea left edge. */}
       {!draft && !recording && (
         <p className="mt-1 pl-[5.5rem] text-[10px] text-muted-foreground">
           {t("draftHint")}
         </p>
       )}
-
-      {/* Interactive-message builder dialog. */}
-      <Dialog open={interactiveOpen} onOpenChange={setInteractiveOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{t("interactiveMessage")}</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[70vh] overflow-y-auto">
-            <InteractiveBuilder
-              value={interactivePayload}
-              onChange={setInteractivePayload}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={savingQuickReply}
-              onClick={saveAsQuickReply}
-            >
-              {savingQuickReply ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Zap className="mr-1 h-4 w-4" />
-              )}
-              {t("saveAsQuickReply")}
-            </Button>
-            <Button onClick={sendInteractive}>
-              <Send className="mr-1 h-4 w-4" />
-              {t("send")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Quick-reply picker. */}
       <QuickReplyPicker

@@ -15,30 +15,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SettingsPanelHead } from "./settings-panel-head";
-import {
-  InteractiveBuilder,
-  blankButtonsPayload,
-} from "@/components/interactive/interactive-builder";
-import {
-  interactivePayloadPreviewText,
-  type InteractiveMessagePayload,
-} from "@/lib/whatsapp/interactive";
-import type { QuickReply, QuickReplyKind } from "@/types";
+import type { QuickReply } from "@/types";
 
 interface DraftState {
   id?: string;
   title: string;
-  kind: QuickReplyKind;
   content_text: string;
-  interactive_payload: InteractiveMessagePayload;
 }
 
 function emptyDraft(): DraftState {
   return {
     title: "",
-    kind: "text",
     content_text: "",
-    interactive_payload: blankButtonsPayload(),
   };
 }
 
@@ -68,22 +56,25 @@ export function QuickRepliesManager() {
     setDraft({
       id: qr.id,
       title: qr.title,
-      kind: qr.kind,
       content_text: qr.content_text ?? "",
-      interactive_payload:
-        qr.interactive_payload ?? blankButtonsPayload(),
     });
 
   const save = useCallback(async () => {
     if (!draft) return;
     if (!draft.title.trim()) {
-      toast.error("Give the quick reply a name.");
+      toast.error("Give the quick reply a name / shortcut.");
       return;
     }
-    const payload =
-      draft.kind === "interactive"
-        ? { title: draft.title, kind: "interactive", interactive_payload: draft.interactive_payload }
-        : { title: draft.title, kind: "text", content_text: draft.content_text };
+    if (!draft.content_text.trim()) {
+      toast.error("Enter the message text to insert.");
+      return;
+    }
+
+    const payload = {
+      title: draft.title.trim(),
+      kind: "text",
+      content_text: draft.content_text.trim(),
+    };
 
     setSaving(true);
     try {
@@ -127,9 +118,9 @@ export function QuickRepliesManager() {
     <div>
       <SettingsPanelHead
         title="Quick replies"
-        description="Reusable snippets — plain text or a saved interactive message — that agents can insert from the inbox composer."
+        description="Pre-saved canned responses and text snippets that agents can insert with 1-click from the inbox composer."
         action={
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Plus className="mr-1 h-4 w-4" />
             New quick reply
           </Button>
@@ -138,11 +129,11 @@ export function QuickRepliesManager() {
 
       {loading ? (
         <div className="flex justify-center py-10">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
         </div>
       ) : items.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-          No quick replies yet. Create one to reuse it across conversations.
+          No quick replies yet. Create one to quickly reuse it across conversations.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -151,17 +142,11 @@ export function QuickRepliesManager() {
               key={qr.id}
               className="flex items-start gap-3 rounded-lg border border-border bg-card p-3"
             >
-              {qr.kind === "interactive" ? (
-                <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              ) : (
-                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              )}
+              <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{qr.title}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {qr.kind === "interactive" && qr.interactive_payload
-                    ? interactivePayloadPreviewText(qr.interactive_payload)
-                    : qr.content_text}
+                <p className="truncate text-sm font-semibold text-foreground">{qr.title}</p>
+                <p className="truncate text-xs text-muted-foreground mt-0.5">
+                  {qr.content_text}
                 </p>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -183,53 +168,38 @@ export function QuickRepliesManager() {
       )}
 
       <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{draft?.id ? "Edit quick reply" : "New quick reply"}</DialogTitle>
           </DialogHeader>
           {draft && (
-            <div className="max-h-[70vh] space-y-3 overflow-y-auto">
+            <div className="space-y-4 pt-2">
               <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Name</label>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Shortcut Name</label>
                 <Input
                   value={draft.title}
                   onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                  placeholder="e.g. Business hours"
-                  className="bg-muted text-foreground"
+                  placeholder="e.g. /pricing or Business Hours"
+                  className="bg-muted text-foreground border-border"
                 />
               </div>
-              <div className="flex gap-2">
-                <KindTab
-                  active={draft.kind === "text"}
-                  label="Text"
-                  onClick={() => setDraft({ ...draft, kind: "text" })}
-                />
-                <KindTab
-                  active={draft.kind === "interactive"}
-                  label="Interactive"
-                  onClick={() => setDraft({ ...draft, kind: "interactive" })}
-                />
-              </div>
-              {draft.kind === "text" ? (
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Message Text</label>
                 <Textarea
                   value={draft.content_text}
                   onChange={(e) => setDraft({ ...draft, content_text: e.target.value })}
-                  placeholder="The message text to insert"
-                  className="min-h-28 bg-muted text-foreground"
+                  placeholder="Type the message snippet to automatically insert..."
+                  className="min-h-32 bg-muted text-foreground border-border text-sm"
                 />
-              ) : (
-                <InteractiveBuilder
-                  value={draft.interactive_payload}
-                  onChange={(p) => setDraft({ ...draft, interactive_payload: p })}
-                />
-              )}
+              </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setDraft(null)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={save} disabled={saving}>
+            <Button onClick={save} disabled={saving} className="bg-primary text-primary-foreground hover:bg-primary/90">
               {saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
               Save
             </Button>
@@ -237,29 +207,5 @@ export function QuickRepliesManager() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function KindTab({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        active
-          ? "flex-1 rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary"
-          : "flex-1 rounded-md border border-border bg-muted px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
-      }
-    >
-      {label}
-    </button>
   );
 }
