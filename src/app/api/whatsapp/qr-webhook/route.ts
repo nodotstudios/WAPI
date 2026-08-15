@@ -124,13 +124,15 @@ export async function POST(request: Request) {
       }
 
       const user_id = config.user_id
+      const account_id = config.account_id || config.user_id
 
       // 3. Find or create Contact
-      let contact = await findExistingContact(supabaseAdmin(), user_id, phone)
+      let contact = await findExistingContact(supabaseAdmin(), account_id, phone)
       if (!contact) {
         const { data: newContact, error: contactError } = await supabaseAdmin()
           .from('contacts')
           .insert({
+            account_id,
             user_id,
             phone,
             name: pushName,
@@ -153,7 +155,7 @@ export async function POST(request: Request) {
       let { data: conversation } = await supabaseAdmin()
         .from('conversations')
         .select('*')
-        .eq('user_id', user_id)
+        .eq('account_id', account_id)
         .eq('contact_id', contact.id)
         .maybeSingle()
 
@@ -161,6 +163,7 @@ export async function POST(request: Request) {
         const { data: newConv, error: convError } = await supabaseAdmin()
           .from('conversations')
           .insert({
+            account_id,
             user_id,
             contact_id: contact.id,
             status: 'open',
