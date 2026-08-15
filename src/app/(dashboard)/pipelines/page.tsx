@@ -42,13 +42,14 @@ import {
   Package,
 } from "lucide-react";
 import { OfferingsManager } from "@/components/crm/offerings-manager";
+import { ScheduleView } from "@/components/crm/schedule-view";
 import { toast } from "sonner";
 import { useCan } from "@/hooks/use-can";
 import { useAuth } from "@/hooks/use-auth";
 import { GatedButton } from "@/components/ui/gated-button";
 import { useTranslations } from "next-intl";
 
-type CrmViewTab = "active" | "dashboard" | "won" | "lost" | "archive" | "activities" | "offerings";
+type CrmViewTab = "dashboard" | "active" | "schedule" | "won" | "lost" | "archive" | "offerings";
 
 const SPEC_DEFAULT_STAGES = [
   { name: "New Lead", color: "#3b82f6", position: 0 },
@@ -65,7 +66,7 @@ export default function PipelinesPage() {
   const canCreateDeals = useCan("send-messages");
   const { accountId, user } = useAuth();
 
-  const [currentView, setCurrentView] = useState<CrmViewTab>("active");
+  const [currentView, setCurrentView] = useState<CrmViewTab>("dashboard");
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -392,6 +393,19 @@ export default function PipelinesPage() {
           <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border">
             <button
               type="button"
+              onClick={() => setCurrentView("dashboard")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                currentView === "dashboard"
+                  ? "bg-primary text-primary-foreground shadow-sm font-bold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <TrendingUp className="size-3.5" />
+              Dashboard
+            </button>
+
+            <button
+              type="button"
               onClick={() => setCurrentView("active")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "active"
@@ -400,20 +414,20 @@ export default function PipelinesPage() {
               }`}
             >
               <LayoutGrid className="size-3.5" />
-              Active Kanban ({activeDeals.length})
+              Pipeline ({activeDeals.length})
             </button>
 
             <button
               type="button"
-              onClick={() => setCurrentView("dashboard")}
+              onClick={() => setCurrentView("schedule")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "dashboard"
-                  ? "bg-background text-foreground shadow-sm font-semibold text-primary"
+                currentView === "schedule"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <TrendingUp className="size-3.5" />
-              Dashboard & Funnel
+              <Clock className="size-3.5" />
+              Schedule
             </button>
 
             <button
@@ -457,23 +471,10 @@ export default function PipelinesPage() {
 
             <button
               type="button"
-              onClick={() => setCurrentView("activities")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "activities"
-                  ? "bg-background text-foreground shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Clock className="size-3.5" />
-              Activities
-            </button>
-
-            <button
-              type="button"
               onClick={() => setCurrentView("offerings")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "offerings"
-                  ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -537,8 +538,8 @@ export default function PipelinesPage() {
         />
       )}
 
-      {currentView === "activities" && (
-        <CrmActivitiesView
+      {currentView === "schedule" && (
+        <ScheduleView
           onSelectDeal={(dealId) => setDetailWorkspaceDealId(dealId)}
         />
       )}

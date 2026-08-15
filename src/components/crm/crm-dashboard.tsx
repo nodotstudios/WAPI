@@ -29,6 +29,7 @@ export function CrmDashboard() {
   const [datePreset, setDatePreset] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [compareMode, setCompareMode] = useState(false);
 
   const [analytics, setAnalytics] = useState<any>(null);
@@ -98,6 +99,9 @@ export function CrmDashboard() {
     try {
       const { from, to, compareFrom, compareTo } = getDateRange();
       let url = `/api/crm/analytics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      if (selectedUserId) {
+        url += `&user_id=${encodeURIComponent(selectedUserId)}`;
+      }
       if (compareMode && compareFrom && compareTo) {
         url += `&compare_from=${encodeURIComponent(compareFrom)}&compare_to=${encodeURIComponent(compareTo)}`;
       }
@@ -110,7 +114,7 @@ export function CrmDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [getDateRange, compareMode]);
+  }, [getDateRange, selectedUserId, compareMode]);
 
   useEffect(() => {
     void loadAnalytics();
@@ -119,6 +123,7 @@ export function CrmDashboard() {
   const m = analytics?.metrics || {};
   const chg = analytics?.change_percentage || {};
   const curr = defaultCurrency || "USD";
+  const teamMembers = analytics?.team_members || [];
 
   return (
     <div className="space-y-6">
@@ -135,6 +140,22 @@ export function CrmDashboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Team Member Filter */}
+          <div className="flex items-center gap-1">
+            <select
+              value={selectedUserId}
+              onChange={(e) => setSelectedUserId(e.target.value)}
+              className="h-9 rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none focus:border-primary font-medium"
+            >
+              <option value="">👥 All Team Members (Overview)</option>
+              {teamMembers.map((tm: any) => (
+                <option key={tm.id} value={tm.id}>
+                  👤 {tm.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Preset Selector */}
           <select
             value={datePreset}
