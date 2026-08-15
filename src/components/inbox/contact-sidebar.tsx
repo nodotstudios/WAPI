@@ -29,13 +29,17 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
 
-  const { accountId } = useAuth();
+  const { user, accountId, defaultCurrency } = useAuth();
   const [copied, setCopied] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [isAddingDeal, setIsAddingDeal] = useState(false);
+  const [dealTitle, setDealTitle] = useState("");
+  const [dealValue, setDealValue] = useState("");
+  const [savingDeal, setSavingDeal] = useState(false);
 
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
@@ -119,6 +123,54 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     setAddingNote(false);
   }, [contact, newNote, accountId]);
 
+  const handleCreateDeal = useCallback(async () => {
+    if (!contact || !user?.id || !dealTitle.trim()) return;
+    setSavingDeal(true);
+    try {
+      const supabase = createClient();
+      const { data: pipeline } = await supabase
+        .from("pipelines")
+        .select("id, name, stages:pipeline_stages(id, name, color, position)")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (!pipeline || !pipeline.stages || pipeline.stages.length === 0) {
+        setSavingDeal(false);
+        return;
+      }
+
+      const sortedStages = [...pipeline.stages].sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0));
+      const firstStage = sortedStages[0];
+      const val = parseFloat(dealValue) || 0;
+
+      const { data: newDeal, error } = await supabase
+        .from("deals")
+        .insert({
+          user_id: user.id,
+          account_id: accountId || undefined,
+          contact_id: contact.id,
+          pipeline_id: pipeline.id,
+          stage_id: firstStage.id,
+          title: dealTitle.trim(),
+          value: val,
+          currency: defaultCurrency || "USD",
+          status: "open",
+        })
+        .select("*, stage:pipeline_stages(*)")
+        .single();
+
+      if (!error && newDeal) {
+        setDeals((prev) => [newDeal, ...prev]);
+        setDealTitle("");
+        setDealValue("");
+        setIsAddingDeal(false);
+      }
+    } finally {
+      setSavingDeal(false);
+    }
+  }, [contact, user, accountId, dealTitle, dealValue, defaultCurrency]);
+
   if (!contact) {
     return (
       <div className="flex h-full w-70 items-center justify-center border-l border-border bg-card">
@@ -141,10 +193,10 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                 <img
                   src={contact.avatar_url}
                   alt={displayName}
-                  className="h-16 w-16 rounded-full object-cover"
+                  className="h-full w-full rounded-full object-cover"
                 />
               ) : (
-                initials
+                <span>{initials}</span>
               )}
             </div>
             <h3 className="mt-3 text-sm font-semibold text-foreground">
@@ -212,10 +264,53 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
           {/* Active Deals */}
           <div>
-            <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <DollarSign className="h-3 w-3" />
-              {tSidebar("deals")}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <DollarSign className="h-3 w-3" />
+                {tSidebar("deals")}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDealTitle(`Deal with ${displayName}`);
+                  setIsAddingDeal(!isAddingDeal);
+                }}
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
+                title="Create Deal"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
             </div>
+
+            {isAddingDeal && (
+              <div className="mt-2 space-y-2 rounded-lg border border-border bg-muted/30 p-2.5">
+                <input
+                  type="text"
+                  placeholder="Deal Title"
+                  value={dealTitle}
+                  onChange={(e) => setDealTitle(e.target.value)}
+                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-primary"
+                />
+                <div className="flex gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="Amount"
+                    value={dealValue}
+                    onChange={(e) => setDealValue(e.target.value)}
+                    className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs text-foreground outline-none focus:border-primary"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleCreateDeal}
+                    disabled={savingDeal || !dealTitle.trim()}
+                    className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {savingDeal ? "..." : "Save"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="mt-2 space-y-2">
               {deals.length === 0 ? (
                 <p className="px-1 text-xs text-muted-foreground">{tSidebar("noDeals")}</p>

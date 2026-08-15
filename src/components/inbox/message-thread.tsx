@@ -33,6 +33,9 @@ import {
   Globe,
   Loader2,
   Trash2,
+  Plus,
+  Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
@@ -183,7 +186,7 @@ export function MessageThread({
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
 
-  const { user } = useAuth();
+  const { user, accountId, defaultCurrency } = useAuth();
   const { getPresence, getRow, now } = usePresence();
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -213,6 +216,236 @@ export function MessageThread({
     }, 700);
   }, [isRefreshing, onRefresh]);
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
+
+  // ==========================================
+  // CRM Deals & Meta Conversion Synchronizer
+  // ==========================================
+  const [createDealModalOpen, setCreateDealModalOpen] = useState(false);
+  const [creatingDeal, setCreatingDeal] = useState(false);
+  const [newDealTitle, setNewDealTitle] = useState("");
+  const [newDealValue, setNewDealValue] = useState("");
+  const [newDealCurrency, setNewDealCurrency] = useState(defaultCurrency || "USD");
+
+  const [contactDeals, setContactDeals] = useState<any[]>([]);
+  const [pipelines, setPipelines] = useState<any[]>([]);
+  const [selectedDealId, setSelectedDealId] = useState<string>("");
+  const [loadingDeals, setLoadingDeals] = useState(false);
+
+  const [isQrMode, setIsQrMode] = useState(false);
+  const [conversionModalOpen, setConversionModalOpen] = useState(false);
+  const [conversionAmount, setConversionAmount] = useState("");
+  const [conversionEvent, setConversionEvent] = useState<"Purchase" | "Lead">("Purchase");
+  const [conversionCurrency, setConversionCurrency] = useState(defaultCurrency || "USD");
+  const [loggingConversion, setLoggingConversion] = useState(false);
+
+  const contactDisplayName = conversation?.contact?.name || conversation?.contact?.phone || "Contact";
+
+  const loadContactDealsAndStages = useCallback(async () => {
+    if (!conversation?.contact?.id) return;
+    setLoadingDeals(true);
+    try {
+      const supabase = createClient();
+      const [dealsRes, pipelinesRes] = await Promise.all([
+        supabase
+          .from("deals")
+          .select("id, title, value, currency, stage_id, status, created_at, stage:pipeline_stages(id, name, color, position)")
+          .eq("contact_id", conversation.contact.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("pipelines")
+          .select("id, name, stages:pipeline_stages(id, name, color, position)")
+          .order("created_at", { ascending: true }),
+      ]);
+
+      if (dealsRes.data) {
+        setContactDeals(dealsRes.data);
+        if (dealsRes.data.length > 0) {
+          const latest = dealsRes.data[0];
+          setSelectedDealId((prev) => prev || latest.id);
+          if (latest.value && !conversionAmount) {
+            setConversionAmount(String(latest.value));
+          }
+          if (latest.currency) {
+            setConversionCurrency(latest.currency);
+          }
+        }
+      }
+      if (pipelinesRes.data) {
+        setPipelines(pipelinesRes.data);
+      }
+    } finally {
+      setLoadingDeals(false);
+    }
+  }, [conversation?.contact?.id, conversionAmount]);
+
+  useEffect(() => {
+    if (conversionModalOpen || createDealModalOpen) {
+      void loadContactDealsAndStages();
+    }
+  }, [conversionModalOpen, createDealModalOpen, loadContactDealsAndStages]);
+
+  const handleCreateDeal = async () => {
+    if (!conversation?.contact?.id || !user?.id) return;
+    const title = newDealTitle.trim() || `Deal with ${contactDisplayName}`;
+    setCreatingDeal(true);
+    try {
+      const supabase = createClient();
+      let targetPipeline = pipelines[0];
+      if (!targetPipeline) {
+        const { data } = await supabase
+          .from("pipelines")
+          .select("id, name, stages:pipeline_stages(id, name, color, position)")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        targetPipeline = data;
+      }
+
+      if (!targetPipeline || !targetPipeline.stages || targetPipeline.stages.length === 0) {
+        toast.error("No pipeline stages found in CRM. Please set up a pipeline in Pipelines page.");
+        return;
+      }
+
+      const sortedStages = [...targetPipeline.stages].sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0));
+      const firstStage = sortedStages[0];
+
+      const val = parseFloat(newDealValue) || 0;
+      const { data: newDeal, error } = await supabase
+        .from("deals")
+        .insert({
+          user_id: user.id,
+          account_id: accountId || undefined,
+          contact_id: conversation.contact.id,
+          conversation_id: conversation.id,
+          pipeline_id: targetPipeline.id,
+          stage_id: firstStage.id,
+          title,
+          value: val,
+          currency: newDealCurrency || defaultCurrency,
+          status: "open",
+        })
+        .select("id, title, value, currency, stage_id, status, created_at, stage:pipeline_stages(id, name, color, position)")
+        .single();
+
+      if (error || !newDeal) {
+        toast.error("Failed to create deal: " + (error?.message || ""));
+        return;
+      }
+
+      toast.success(`🎉 Deal created and placed in "${firstStage.name}" stage on CRM Pipeline!`);
+      setCreateDealModalOpen(false);
+      setNewDealTitle("");
+      setNewDealValue("");
+      await loadContactDealsAndStages();
+      setSelectedDealId(newDeal.id);
+      if (val > 0) setConversionAmount(String(val));
+    } catch (err: any) {
+      toast.error("Error creating deal: " + (err?.message || ""));
+    } finally {
+      setCreatingDeal(false);
+    }
+  };
+
+  const handleLogConversion = async () => {
+    if (!conversation?.contact?.id) return;
+
+    // Check if active deal exists
+    const activeDeal = contactDeals.find((d) => d.id === selectedDealId) || contactDeals[0];
+    if (!activeDeal) {
+      toast.error("Please create a deal first before qualifying or logging a sale.");
+      return;
+    }
+
+    const num = parseFloat(conversionAmount);
+    if (conversionEvent === "Purchase" && (isNaN(num) || num <= 0)) {
+      toast.error("Please enter a valid sale amount.");
+      return;
+    }
+
+    setLoggingConversion(true);
+    try {
+      const supabase = createClient();
+      const defaultPipeline = pipelines[0];
+      const sortedStages = defaultPipeline?.stages
+        ? [...defaultPipeline.stages].sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+        : [];
+
+      let targetStageName = "";
+
+      if (conversionEvent === "Lead") {
+        // Find Qualification stage (matching /qualif|contact|in progress/i or 2nd stage)
+        const qualStage =
+          sortedStages.find((s: any) => /qualif|contact|in progress/i.test(s.name)) ||
+          (sortedStages.length > 1 ? sortedStages[1] : sortedStages[0]);
+
+        if (qualStage) {
+          targetStageName = qualStage.name;
+          await supabase
+            .from("deals")
+            .update({
+              stage_id: qualStage.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", activeDeal.id);
+        }
+      } else if (conversionEvent === "Purchase") {
+        // Find Won stage (matching /won|closed won|converted/i or last stage)
+        const wonStage =
+          sortedStages.find((s: any) => /won|closed won|converted/i.test(s.name)) ||
+          sortedStages[sortedStages.length - 1];
+
+        if (wonStage) {
+          targetStageName = wonStage.name;
+          await supabase
+            .from("deals")
+            .update({
+              stage_id: wonStage.id,
+              status: "won",
+              value: num,
+              currency: conversionCurrency,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", activeDeal.id);
+        }
+      }
+
+      // Push event to Meta CAPI
+      const res = await fetch("/api/meta/capi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: conversation.contact.id,
+          deal_id: activeDeal.id,
+          event_name: conversionEvent,
+          value: num || undefined,
+          currency: conversionCurrency,
+          content_name: activeDeal.title || `Sale from Chat (${contactDisplayName})`,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(`Meta CAPI Error: ${data.error || "Failed to push conversion"}`);
+        return;
+      }
+
+      if (conversionEvent === "Purchase") {
+        toast.success(
+          `💰 Sale logged! Deal marked as WON (${targetStageName}) and pushed ${conversionCurrency} ${num.toFixed(2)} to Facebook Pixel!`
+        );
+      } else {
+        toast.success(`🎯 Lead qualified! Deal moved to "${targetStageName}" in CRM Pipeline and pushed to Meta Ads.`);
+      }
+
+      setConversionModalOpen(false);
+      await loadContactDealsAndStages();
+    } catch {
+      toast.error("Failed to process conversion");
+    } finally {
+      setLoggingConversion(false);
+    }
+  };
+
   // Which attachment the media viewer is showing. Lives here rather than in
   // the bubble so the viewer can page through every image/video in the
   // thread (issue #373). Paired with the conversation it belongs to and read
@@ -245,55 +478,6 @@ export function MessageThread({
       cancelled = true;
     };
   }, []);
-
-  const [isQrMode, setIsQrMode] = useState(false);
-  const [conversionModalOpen, setConversionModalOpen] = useState(false);
-  const [conversionAmount, setConversionAmount] = useState("");
-  const [conversionEvent, setConversionEvent] = useState<"Purchase" | "Lead">("Purchase");
-  const [conversionCurrency, setConversionCurrency] = useState("USD");
-  const [loggingConversion, setLoggingConversion] = useState(false);
-
-  const handleLogConversion = async () => {
-    if (!conversation?.contact?.id) return;
-    const num = parseFloat(conversionAmount);
-    if (conversionEvent === "Purchase" && (isNaN(num) || num <= 0)) {
-      toast.error("Please enter a valid conversion amount.");
-      return;
-    }
-
-    setLoggingConversion(true);
-    try {
-      const res = await fetch("/api/meta/capi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contact_id: conversation.contact.id,
-          event_name: conversionEvent,
-          value: num || undefined,
-          currency: conversionCurrency,
-          content_name: `Sale from Chat (${conversation.contact.name || conversation.contact.phone})`,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(`Meta CAPI Error: ${data.error || "Failed to push conversion"}`);
-        return;
-      }
-
-      toast.success(
-        conversionEvent === "Purchase"
-          ? `Pushed ${conversionCurrency} ${num.toFixed(2)} Purchase conversion to Meta Ads!`
-          : "Pushed Lead conversion event to Meta Ads!"
-      );
-      setConversionModalOpen(false);
-      setConversionAmount("");
-    } catch {
-      toast.error("Failed to push conversion event");
-    } finally {
-      setLoggingConversion(false);
-    }
-  };
 
   const [clearChatModalOpen, setClearChatModalOpen] = useState(false);
   const [clearingChat, setClearingChat] = useState(false);
@@ -861,8 +1045,6 @@ export function MessageThread({
     return map;
   }, [reactions]);
 
-  const contactDisplayName = contact?.name || contact?.phone || "Customer";
-
   // Author label for a quoted message: "You" when we sent the parent,
   // contact name when the customer sent it.
   const authorLabelFor = useCallback(
@@ -1055,6 +1237,22 @@ export function MessageThread({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Create Deal Button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setNewDealTitle(`Deal with ${contactDisplayName}`);
+              setCreateDealModalOpen(true);
+            }}
+            className="h-7 gap-1 px-2 text-xs border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+            title="Create Deal in CRM Pipeline for this contact"
+          >
+            <Plus className="size-3.5" />
+            <span className="hidden md:inline">Create Deal</span>
+          </Button>
+
           {/* Log Conversion (Meta CAPI) Button */}
           <Button
             type="button"
@@ -1062,7 +1260,7 @@ export function MessageThread({
             size="sm"
             onClick={() => setConversionModalOpen(true)}
             className="h-7 gap-1 px-2 text-xs border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
-            title="Push Sale / Conversion to Facebook Ads"
+            title="Log Sale or Qualify Lead (Syncs with CRM & Facebook Pixel)"
           >
             <DollarSign className="size-3.5" />
             <span className="hidden sm:inline">Log Sale</span>
@@ -1358,114 +1556,271 @@ export function MessageThread({
         contactLabel={contactDisplayName}
       />
 
-      {/* Log Conversion to Facebook Ads Modal */}
-      <Dialog open={conversionModalOpen} onOpenChange={setConversionModalOpen}>
+      {/* Create Deal Directly from Chat Modal */}
+      <Dialog open={createDealModalOpen} onOpenChange={setCreateDealModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
-              <DollarSign className="size-5 text-emerald-400" />
-              Log Conversion for Meta Ads
+              <Plus className="size-5 text-primary" />
+              Create Deal in CRM Pipeline
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-xs text-muted-foreground">
-              Send a server-side conversion event (Purchase / Lead) directly to Meta Ads Manager for{" "}
-              <strong className="text-foreground">{contactDisplayName}</strong>.
-            </p>
-
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+              Creating a deal for <strong className="text-foreground">{contactDisplayName}</strong> ({contact.phone}). It will be automatically added to the <strong>&quot;{pipelines[0]?.stages?.[0]?.name || "New Lead"}&quot;</strong> stage on your Kanban board.
+            </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Conversion Event Type
+                Deal Title
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={conversionEvent === "Purchase" ? "default" : "outline"}
-                  onClick={() => setConversionEvent("Purchase")}
-                  className={cn(
-                    "text-xs",
-                    conversionEvent === "Purchase" ? "bg-primary text-primary-foreground" : "border-border"
-                  )}
+              <Input
+                value={newDealTitle}
+                onChange={(e) => setNewDealTitle(e.target.value)}
+                placeholder={`e.g. Deal with ${contactDisplayName}`}
+                className="bg-muted text-foreground border-border text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Deal Amount / Offer Value
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newDealValue}
+                  onChange={(e) => setNewDealValue(e.target.value)}
+                  placeholder="e.g. 500.00"
+                  className="bg-muted text-foreground border-border text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Currency
+                </label>
+                <select
+                  value={newDealCurrency}
+                  onChange={(e) => setNewDealCurrency(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-border bg-muted px-2 py-2 text-xs text-foreground outline-none focus:border-primary"
                 >
-                  Purchase (Sale)
-                </Button>
-                <Button
-                  type="button"
-                  variant={conversionEvent === "Lead" ? "default" : "outline"}
-                  onClick={() => setConversionEvent("Lead")}
-                  className={cn(
-                    "text-xs",
-                    conversionEvent === "Lead" ? "bg-primary text-primary-foreground" : "border-border"
-                  )}
-                >
-                  Lead (Qualified)
-                </Button>
+                  <option value="USD">USD ($)</option>
+                  <option value="INR">INR (₹)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="AED">AED</option>
+                  <option value="CAD">CAD</option>
+                  <option value="AUD">AUD</option>
+                  <option value="SGD">SGD</option>
+                </select>
               </div>
             </div>
-
-            {conversionEvent === "Purchase" && (
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2">
-                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                    Sale Amount
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={conversionAmount}
-                    onChange={(e) => setConversionAmount(e.target.value)}
-                    placeholder="e.g. 250.00"
-                    className="bg-muted text-foreground border-border text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                    Currency
-                  </label>
-                  <select
-                    value={conversionCurrency}
-                    onChange={(e) => setConversionCurrency(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-border bg-muted px-2 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="INR">INR (₹)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="AED">AED</option>
-                    <option value="CAD">CAD</option>
-                    <option value="AUD">AUD</option>
-                    <option value="SGD">SGD</option>
-                  </select>
-                </div>
-              </div>
-            )}
           </div>
           <DialogFooter className="mt-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setConversionModalOpen(false)}
-              disabled={loggingConversion}
+              onClick={() => setCreateDealModalOpen(false)}
+              disabled={creatingDeal}
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              onClick={handleLogConversion}
-              disabled={loggingConversion}
+              onClick={handleCreateDeal}
+              disabled={creatingDeal}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {loggingConversion ? (
+              {creatingDeal ? (
                 <>
                   <Loader2 className="mr-1.5 size-4 animate-spin" />
-                  Pushing to Meta...
+                  Creating Deal...
                 </>
               ) : (
-                "Push to Facebook Ads"
+                "Create & Add to Pipeline"
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Conversion & Kanban Pipeline Synchronizer Modal */}
+      <Dialog open={conversionModalOpen} onOpenChange={setConversionModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <DollarSign className="size-5 text-emerald-400" />
+              Log Sale & CRM Stage Sync
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {contactDeals.length === 0 ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-300">
+                  ⚠️ <strong>No Active Deal Found:</strong>
+                  <p className="mt-1 text-muted-foreground">
+                    You cannot mark this lead as Qualified or Won because there is no offer or deal created for <strong className="text-foreground">{contactDisplayName}</strong> yet.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setConversionModalOpen(false);
+                    setNewDealTitle(`Deal with ${contactDisplayName}`);
+                    setCreateDealModalOpen(true);
+                  }}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 text-xs"
+                >
+                  <Plus className="mr-1.5 size-4" />
+                  Create Deal for this Customer First
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* Active Deal Selector */}
+                <div className="rounded-xl border border-border/60 bg-muted/40 p-3 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Target Deal:</span>
+                    {contactDeals.find((d) => d.id === selectedDealId)?.stage && (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{
+                          backgroundColor: `${contactDeals.find((d) => d.id === selectedDealId)?.stage?.color || "#3b82f6"}20`,
+                          color: contactDeals.find((d) => d.id === selectedDealId)?.stage?.color || "#3b82f6",
+                        }}
+                      >
+                        Stage: {contactDeals.find((d) => d.id === selectedDealId)?.stage?.name}
+                      </span>
+                    )}
+                  </div>
+                  {contactDeals.length === 1 ? (
+                    <div className="text-sm font-semibold text-foreground">
+                      {contactDeals[0].title} — {contactDeals[0].currency || defaultCurrency} {Number(contactDeals[0].value || 0).toLocaleString()}
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedDealId}
+                      onChange={(e) => {
+                        setSelectedDealId(e.target.value);
+                        const match = contactDeals.find((d) => d.id === e.target.value);
+                        if (match?.value) setConversionAmount(String(match.value));
+                        if (match?.currency) setConversionCurrency(match.currency);
+                      }}
+                      className="flex h-9 w-full rounded-md border border-border bg-muted px-2 py-1 text-xs text-foreground outline-none focus:border-primary"
+                    >
+                      {contactDeals.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.title} ({d.currency || defaultCurrency} {d.value})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    Action to Perform:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={conversionEvent === "Purchase" ? "default" : "outline"}
+                      onClick={() => setConversionEvent("Purchase")}
+                      className={cn(
+                        "text-xs flex-col h-auto py-2",
+                        conversionEvent === "Purchase" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "border-border"
+                      )}
+                    >
+                      <span className="font-semibold">💰 Won Deal (Sale)</span>
+                      <span className="text-[10px] opacity-80">Move to Won & Push Pixel</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={conversionEvent === "Lead" ? "default" : "outline"}
+                      onClick={() => setConversionEvent("Lead")}
+                      className={cn(
+                        "text-xs flex-col h-auto py-2",
+                        conversionEvent === "Lead" ? "bg-blue-600 text-white hover:bg-blue-700" : "border-border"
+                      )}
+                    >
+                      <span className="font-semibold">🌟 Qualified Lead</span>
+                      <span className="text-[10px] opacity-80">Move to Qualified Stage</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {conversionEvent === "Purchase" && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        Confirmed Sale Amount
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={conversionAmount}
+                        onChange={(e) => setConversionAmount(e.target.value)}
+                        placeholder="e.g. 500.00"
+                        className="bg-muted text-foreground border-border text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        Currency
+                      </label>
+                      <select
+                        value={conversionCurrency}
+                        onChange={(e) => setConversionCurrency(e.target.value)}
+                        className="flex h-10 w-full rounded-md border border-border bg-muted px-2 py-2 text-xs text-foreground outline-none focus:border-primary"
+                      >
+                        <option value="USD">USD ($)</option>
+                        <option value="INR">INR (₹)</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="GBP">GBP (£)</option>
+                        <option value="AED">AED</option>
+                        <option value="CAD">CAD</option>
+                        <option value="AUD">AUD</option>
+                        <option value="SGD">SGD</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          {contactDeals.length > 0 && (
+            <DialogFooter className="mt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConversionModalOpen(false)}
+                disabled={loggingConversion}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleLogConversion}
+                disabled={loggingConversion}
+                className={cn(
+                  "text-white",
+                  conversionEvent === "Purchase" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"
+                )}
+              >
+                {loggingConversion ? (
+                  <>
+                    <Loader2 className="mr-1.5 size-4 animate-spin" />
+                    Syncing CRM & Meta...
+                  </>
+                ) : conversionEvent === "Purchase" ? (
+                  "Confirm Sale & Move to WON"
+                ) : (
+                  "Mark Qualified & Move on Kanban"
+                )}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
