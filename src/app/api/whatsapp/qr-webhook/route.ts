@@ -1,4 +1,4 @@
-import { fetchEvolutionMediaBase64 } from '@/lib/whatsapp/evolution-api';
+import { fetchEvolutionMediaBase64, fetchEvolutionProfilePic } from '@/lib/whatsapp/evolution-api';
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
@@ -234,6 +234,25 @@ export async function POST(request: Request) {
           })
           .eq('id', contact.id)
           .catch(() => {})
+      }
+
+      // Fetch avatar from WhatsApp via Evolution API if not already present
+      if (contact && !contact.avatar_url && config.qr_gateway_url && config.qr_api_key && config.qr_instance_name) {
+        void fetchEvolutionProfilePic(
+          {
+            gatewayUrl: config.qr_gateway_url,
+            apiKey: config.qr_api_key,
+            instanceName: config.qr_instance_name,
+          },
+          phone
+        ).then((pfpUrl) => {
+          if (pfpUrl) {
+            void supabaseAdmin()
+              .from('contacts')
+              .update({ avatar_url: pfpUrl })
+              .eq('id', contact.id)
+          }
+        }).catch(() => {})
       }
 
       if (!contact) {

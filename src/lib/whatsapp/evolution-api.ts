@@ -220,3 +220,33 @@ export async function fetchEvolutionMediaBase64(
     return null
   }
 }
+
+/**
+ * Fetch contact Profile Picture from WhatsApp via Evolution API
+ */
+export async function fetchEvolutionProfilePic(
+  config: EvolutionConfig,
+  phone: string
+): Promise<string | null> {
+  try {
+    const baseUrl = config.gatewayUrl.replace(/\/$/, '')
+    const cleanPhone = phone.replace(/\D/g, '')
+
+    const response = await fetch(`${baseUrl}/chat/fetchProfilePictureUrl/${config.instanceName}`, {
+      method: 'POST',
+      headers: {
+        'apikey': config.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        number: cleanPhone,
+      }),
+    })
+
+    if (!response.ok) return null
+    const data = await response.json()
+    return data?.profilePictureUrl || data?.url || data?.picture || null
+  } catch {
+    return null
+  }
+}
