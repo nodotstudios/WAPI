@@ -29,44 +29,11 @@ export async function PATCH(
     if (!title) return NextResponse.json({ error: 'title cannot be empty' }, { status: 400 })
     update.title = title
   }
-
-  // When `kind` is supplied (e.g. the editor flips Text ↔ Interactive), it
-  // drives which content column is authoritative and the other is cleared —
-  // otherwise a switched row keeps a stale payload the picker mis-routes on.
-  if ('kind' in body) {
-    if (body.kind !== 'text' && body.kind !== 'interactive') {
-      return NextResponse.json({ error: 'kind must be "text" or "interactive"' }, { status: 400 })
-    }
-    update.kind = body.kind
-    if (body.kind === 'interactive') {
-      const result = validateInteractivePayload(body.interactive_payload)
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
-      update.interactive_payload = body.interactive_payload
-      update.content_text = null
-    } else {
-      const text = typeof body.content_text === 'string' ? body.content_text : ''
-      if (!text.trim()) {
-        return NextResponse.json(
-          { error: 'content_text is required for text quick replies' },
-          { status: 400 },
-        )
-      }
-      update.content_text = text
-      update.interactive_payload = null
-    }
-  } else {
-    // No kind change — allow partial edits of whichever field the row uses.
-    if ('content_text' in body) update.content_text = body.content_text ?? null
-    if ('interactive_payload' in body) {
-      if (body.interactive_payload != null) {
-        const result = validateInteractivePayload(body.interactive_payload)
-        if (!result.ok) {
-          return NextResponse.json({ error: result.error }, { status: 400 })
-        }
-      }
-      update.interactive_payload = body.interactive_payload ?? null
-    }
-  }
+  if ('kind' in body) update.kind = body.kind
+  if ('content_text' in body) update.content_text = body.content_text ?? null
+  if ('media_url' in body) update.media_url = body.media_url ?? null
+  if ('media_type' in body) update.media_type = body.media_type ?? null
+  if ('filename' in body) update.filename = body.filename ?? null
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true })

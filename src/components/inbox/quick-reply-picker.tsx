@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, MessageSquare, Zap } from "lucide-react";
+import { Loader2, MessageSquare, Zap, Paperclip, FileText } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -39,7 +39,10 @@ export function QuickReplyPicker({
         const res = await fetch("/api/quick-replies", { cache: "no-store" });
         const data = await res.json().catch(() => ({}));
         if (!cancelled && res.ok) {
-          setItems((data.quick_replies as QuickReply[]) ?? []);
+          const list = ((data.quick_replies as QuickReply[]) ?? []).filter(
+            (qr) => qr.kind !== "interactive",
+          );
+          setItems(list);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -69,7 +72,7 @@ export function QuickReplyPicker({
               {t("quickRepliesEmpty")}
             </p>
           ) : (
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex flex-col gap-2">
               {items.map((qr) => (
                 <li key={qr.id}>
                   <button
@@ -78,17 +81,41 @@ export function QuickReplyPicker({
                       onPick(qr);
                       onOpenChange(false);
                     }}
-                    className="flex w-full items-start gap-2.5 rounded-lg border border-border bg-card p-3 text-left transition-all hover:border-primary/50 hover:bg-muted"
+                    className="flex w-full items-start gap-3 rounded-xl border border-border bg-card p-3 text-left transition-all hover:border-primary/50 hover:bg-muted"
                   >
-                    <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-foreground">
-                        {qr.title}
-                      </span>
+                    {qr.media_url ? (
+                      qr.media_type === "image" ? (
+                        <div className="size-9 rounded-lg overflow-hidden shrink-0 border border-border bg-muted">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={qr.media_url} alt={qr.title} className="size-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                          <FileText className="size-4" />
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground shrink-0">
+                        <MessageSquare className="size-4" />
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold text-foreground">
+                          {qr.title}
+                        </span>
+                        {qr.media_url && (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground flex items-center gap-0.5">
+                            <Paperclip className="size-2.5" />
+                            {qr.filename || "File"}
+                          </span>
+                        )}
+                      </div>
                       <span className="block line-clamp-2 text-xs text-muted-foreground mt-0.5">
-                        {qr.content_text}
+                        {qr.content_text || (qr.media_url ? "Attachment only" : "")}
                       </span>
-                    </span>
+                    </div>
                   </button>
                 </li>
               ))}

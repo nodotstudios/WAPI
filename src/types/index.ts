@@ -663,7 +663,7 @@ export interface AutomationLog {
 // Quick replies — reusable snippets (migration 035)
 // ============================================================
 
-export type QuickReplyKind = 'text' | 'interactive';
+export type QuickReplyKind = 'text' | 'media' | 'interactive';
 
 export interface QuickReply {
   id: string;
@@ -673,8 +673,12 @@ export interface QuickReply {
   user_id: string;
   title: string;
   kind: QuickReplyKind;
-  /** Set when `kind === 'text'`. */
+  /** Set when `kind === 'text'` or caption for media. */
   content_text?: string | null;
+  /** Media attachment URL (image, pdf, document) */
+  media_url?: string | null;
+  media_type?: 'image' | 'video' | 'document' | 'audio' | null;
+  filename?: string | null;
   /** Set when `kind === 'interactive'`. */
   interactive_payload?: InteractiveMessagePayload | null;
   created_at: string;

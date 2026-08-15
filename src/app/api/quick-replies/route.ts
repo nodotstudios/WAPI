@@ -35,29 +35,21 @@ export async function POST(request: Request) {
   if (!body) return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
 
   const title = typeof body.title === 'string' ? body.title.trim() : ''
-  const kind = body.kind === 'interactive' ? 'interactive' : 'text'
+  const kind = body.kind === 'media' ? 'media' : (body.kind === 'interactive' ? 'interactive' : 'text')
   if (!title) {
     return NextResponse.json({ error: 'title is required' }, { status: 400 })
   }
 
-  let content_text: string | null = null
-  let interactive_payload: unknown = null
+  let content_text: string | null = typeof body.content_text === 'string' ? body.content_text : null
+  const media_url: string | null = typeof body.media_url === 'string' ? body.media_url : null
+  const media_type: string | null = typeof body.media_type === 'string' ? body.media_type : null
+  const filename: string | null = typeof body.filename === 'string' ? body.filename : null
 
-  if (kind === 'interactive') {
-    const result = validateInteractivePayload(body.interactive_payload)
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
-    }
-    interactive_payload = body.interactive_payload
-  } else {
-    const text = typeof body.content_text === 'string' ? body.content_text : ''
-    if (!text.trim()) {
-      return NextResponse.json(
-        { error: 'content_text is required for text quick replies' },
-        { status: 400 },
-      )
-    }
-    content_text = text
+  if (kind === 'text' && !content_text?.trim()) {
+    return NextResponse.json(
+      { error: 'content_text is required for text quick replies' },
+      { status: 400 },
+    )
   }
 
   const { data, error } = await supabaseAdmin()
@@ -68,7 +60,9 @@ export async function POST(request: Request) {
       title,
       kind,
       content_text,
-      interactive_payload,
+      media_url,
+      media_type,
+      filename,
     })
     .select()
     .single()

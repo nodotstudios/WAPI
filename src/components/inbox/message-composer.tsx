@@ -59,7 +59,7 @@ export interface SendMediaPayload {
   /** Public chat-media URL Meta fetches at send time. */
   mediaUrl: string;
   /** Storage object path — lets the caller GC the object if the send fails. */
-  path: string;
+  path?: string;
   /** Optional caption (image/video/document only). */
   caption?: string;
   /** Original file name — surfaced to the recipient for documents. */
@@ -89,7 +89,7 @@ interface MediaDraft {
   kind: ComposerMediaKind;
   mediaUrl: string;
   /** Storage path — used to GC the object if the draft is discarded. */
-  path: string;
+  path?: string;
   filename: string;
   caption: string;
 }
@@ -283,6 +283,18 @@ export function MessageComposer({
   const handlePickQuickReply = useCallback(
     (qr: QuickReply) => {
       setQuickReplyOpen(false);
+
+      if (qr.media_url) {
+        removeStaged(draftRef.current?.path);
+        setDraft({
+          kind: (qr.media_type as ComposerMediaKind) || "document",
+          mediaUrl: qr.media_url,
+          filename: qr.filename || "attachment",
+          caption: qr.content_text || "",
+        });
+        return;
+      }
+
       const body = qr.content_text ?? "";
       setText((prev) =>
         prev && !/\s$/.test(prev) ? `${prev}\n${body}` : `${prev}${body}`,
@@ -296,7 +308,7 @@ export function MessageComposer({
         }
       });
     },
-    [adjustHeight],
+    [adjustHeight, removeStaged],
   );
 
   // Upload a captured file to chat-media and stage it as a draft.
