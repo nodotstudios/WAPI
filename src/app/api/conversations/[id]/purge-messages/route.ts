@@ -27,8 +27,7 @@ export async function POST(
     const { error: delErr, count } = await supabaseAdmin()
       .from("messages")
       .delete({ count: "exact" })
-      .eq("conversation_id", conversationId)
-      .eq("account_id", accountId);
+      .eq("conversation_id", conversationId);
 
     if (delErr) {
       return NextResponse.json({ error: delErr.message }, { status: 500 });

@@ -16,15 +16,33 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Also get total message count for this account
-    const { count: totalMessages } = await supabaseAdmin()
-      .from("messages")
-      .select("*", { count: "exact", head: true })
+    // Get conversations for this account
+    const { data: convs } = await supabaseAdmin()
+      .from("conversations")
+      .select("id")
       .eq("account_id", accountId);
+
+    const convIds = (convs || []).map((c) => c.id);
+    let totalMessages = 0;
+
+    if (convIds.length > 0) {
+      const { count } = await supabaseAdmin()
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .in("conversation_id", convIds);
+      totalMessages = count ?? 0;
+    }
+
+    // Estimate storage size (approx 650 bytes per text/media record + metadata)
+    const estimatedBytes = totalMessages * 650;
+    const mbUsed = Math.max(0.01, estimatedBytes / (1024 * 1024));
 
     return NextResponse.json({
       retention_days: account.chat_retention_days || 0,
-      total_messages: totalMessages ?? 0,
+      total_messages: totalMessages,
+      estimated_bytes: estimatedBytes,
+      storage_mb: parseFloat(mbUsed.toFixed(2)),
+      storage_formatted: mbUsed < 0.1 ? `${(estimatedBytes / 1024).toFixed(1)} KB` : `${mbUsed.toFixed(2)} MB`,
     });
   } catch (err) {
     return toErrorResponse(err);
@@ -54,16 +72,23 @@ export async function POST(request: Request) {
 
     let purgedCount = 0;
     if (trigger_purge_now && retentionDaysNumber > 0) {
-      const { data: result, error: rpcErr } = await supabaseAdmin().rpc(
-        "purge_expired_messages",
-        {
-          p_account_id: accountId,
-          p_retention_days: retentionDaysNumber,
-        }
-      );
+      const { data: convs } = await supabaseAdmin()
+        .from("conversations")
+        .select("id")
+        .eq("account_id", accountId);
 
-      if (!rpcErr && typeof result === "number") {
-        purgedCount = result;
+      const convIds = (convs || []).map((c) => c.id);
+      if (convIds.length > 0) {
+        const cutoffDate = new Date(Date.now() - retentionDaysNumber * 24 * 60 * 60 * 1000).toISOString();
+        const { error: delErr, count: deleted } = await supabaseAdmin()
+          .from("messages")
+          .delete({ count: "exact" })
+          .in("conversation_id", convIds)
+          .lt("created_at", cutoffDate);
+
+        if (!delErr && typeof deleted === "number") {
+          purgedCount = deleted;
+        }
       }
     }
 

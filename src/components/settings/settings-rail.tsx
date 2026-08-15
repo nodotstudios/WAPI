@@ -89,7 +89,7 @@ export function SettingsRail({
                   )}
                 >
                   <Icon className="size-4 shrink-0" />
-                  <span className="flex-1">{t(`sections.${s}`)}</span>
+                  <span className="flex-1">{t.has(`sections.${s}`) ? t(`sections.${s}`) : meta.label}</span>
                   {hints?.[s] != null ? (
                     <span
                       className={cn(

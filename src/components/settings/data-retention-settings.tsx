@@ -20,6 +20,8 @@ import { SettingsPanelHead } from "./settings-panel-head";
 export function DataRetentionSettings() {
   const [retentionDays, setRetentionDays] = useState<number>(0);
   const [totalMessages, setTotalMessages] = useState<number>(0);
+  const [storageFormatted, setStorageFormatted] = useState<string>("0 KB");
+  const [storageMb, setStorageMb] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [purging, setPurging] = useState(false);
@@ -32,6 +34,8 @@ export function DataRetentionSettings() {
       if (res.ok) {
         setRetentionDays(data.retention_days ?? 0);
         setTotalMessages(data.total_messages ?? 0);
+        setStorageFormatted(data.storage_formatted ?? "0 KB");
+        setStorageMb(data.storage_mb ?? 0);
       }
     } finally {
       setLoading(false);
@@ -77,6 +81,9 @@ export function DataRetentionSettings() {
     }
   };
 
+  const freeTierLimitMb = 500;
+  const pctUsed = Math.min(100, Math.max(0.1, (storageMb / freeTierLimitMb) * 100));
+
   return (
     <div className="space-y-6">
       <SettingsPanelHead
@@ -104,6 +111,44 @@ export function DataRetentionSettings() {
         </div>
       ) : (
         <>
+          {/* Storage Usage Overview Card */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <Database className="size-4 text-primary" />
+                  Account Messages
+                </span>
+                <span className="font-semibold text-foreground">{totalMessages.toLocaleString()} records</span>
+              </div>
+              <div className="text-xl font-bold text-foreground">
+                {totalMessages.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">stored in CRM</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <HardDrive className="size-4 text-emerald-400" />
+                  Storage Footprint
+                </span>
+                <span className="font-semibold text-emerald-400">{storageFormatted} / {freeTierLimitMb} MB</span>
+              </div>
+              <div className="space-y-1.5">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all"
+                    style={{ width: `${Math.max(2, pctUsed)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>{pctUsed.toFixed(2)}% of 500MB Free Tier</span>
+                  <span>{(freeTierLimitMb - storageMb).toFixed(1)} MB available</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Main Retention Policy Card */}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
             <div className="flex items-center gap-3 border-b border-border pb-4">
@@ -138,11 +183,11 @@ export function DataRetentionSettings() {
               </div>
 
               <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/40 p-4">
-                <Database className="size-8 text-muted-foreground/70 shrink-0" />
+                <ShieldCheck className="size-8 text-emerald-400 shrink-0" />
                 <div>
-                  <div className="text-xs text-muted-foreground">Current Active Messages:</div>
-                  <div className="text-lg font-bold text-foreground">
-                    {totalMessages.toLocaleString()} messages
+                  <div className="text-xs font-semibold text-foreground">Zero-Risk Data Purge</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    Only old chat bubbles are purged. Contacts & sales logs stay permanently.
                   </div>
                 </div>
               </div>

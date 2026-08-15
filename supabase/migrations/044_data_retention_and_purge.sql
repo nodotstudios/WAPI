@@ -20,7 +20,7 @@ BEGIN
   v_cutoff_date := NOW() - (p_retention_days || ' days')::INTERVAL;
 
   DELETE FROM messages
-  WHERE account_id = p_account_id
+  WHERE conversation_id IN (SELECT id FROM conversations WHERE account_id = p_account_id)
     AND created_at < v_cutoff_date;
 
   GET DIAGNOSTICS v_deleted_count = ROW_COUNT;

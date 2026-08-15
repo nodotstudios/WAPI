@@ -1157,6 +1157,20 @@
         "pickNextNode": "다음 노드를 선택하세요…",
         "none": "— 없음 —"
       },
+      "sections": {
+        "overview": "개요",
+        "profile": "프로필",
+        "security": "로그인 및 보안",
+        "appearance": "화면 설정",
+        "whatsapp": "WhatsApp Web",
+        "facebook-ads": "Facebook Pixel",
+        "data-retention": "데이터 보존",
+        "quick-replies": "빠른 답변",
+        "fields": "필드 및 태그",
+        "deals": "딜 및 통화",
+        "members": "팀원",
+        "api": "API 키"
+      },
       "categories": {
         "messaging": "메시징",
         "logic": "로직 & 데이터",
