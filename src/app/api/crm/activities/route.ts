@@ -52,6 +52,8 @@ export async function GET(request: Request) {
   }
 }
 
+import { createGoogleCalendarEvent } from "@/lib/google/calendar";
+
 export async function POST(request: Request) {
   try {
     const { userId, accountId } = await requireRole("agent");
@@ -71,10 +73,35 @@ export async function POST(request: Request) {
       google_calendar_event_id,
       google_meet_url,
       next_follow_up_at,
+      create_google_event,
+      attendee_email,
     } = body;
 
     if (!type || !title) {
       return NextResponse.json({ error: "Type and title are required" }, { status: 400 });
+    }
+
+    let finalEventId = google_calendar_event_id || null;
+    let finalMeetUrl = google_meet_url || null;
+
+    // Automatically trigger Google Calendar API event creation if requested or type is google_meet
+    if ((type === "google_meet" || create_google_event) && scheduled_at) {
+      const attendees = attendee_email ? [attendee_email.trim()] : undefined;
+      const calRes = await createGoogleCalendarEvent({
+        accountId,
+        userId,
+        title: title.trim(),
+        description: description || undefined,
+        startTime: scheduled_at,
+        durationMinutes: duration_minutes || 30,
+        attendees,
+        createMeetLink: true,
+      });
+
+      if (calRes) {
+        finalEventId = calRes.eventId;
+        finalMeetUrl = calRes.meetUrl || calRes.eventUrl || null;
+      }
     }
 
     const activity = await createCrmActivity({
@@ -90,8 +117,8 @@ export async function POST(request: Request) {
       status,
       callOutcome: call_outcome,
       callNotes: call_notes,
-      googleCalendarEventId: google_calendar_event_id,
-      googleMeetUrl: google_meet_url,
+      googleCalendarEventId: finalEventId,
+      googleMeetUrl: finalMeetUrl,
       nextFollowUpAt: next_follow_up_at,
     });
 
@@ -99,7 +126,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to create activity" }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, activity });
+    return NextResponse.json({ ok: true, activity, googleMeetUrl: finalMeetUrl });
   } catch (err) {
     return toErrorResponse(err);
   }

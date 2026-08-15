@@ -149,9 +149,138 @@ interface ScheduleMeetingModalProps {
   onSuccess: () => void;
 }
 
+export function ModernDateTimePicker({
+  value,
+  onChange,
+  label = "Date & Time",
+}: {
+  value: string;
+  onChange: (isoString: string) => void;
+  label?: string;
+}) {
+  // Parsed initial date & time values
+  const dateObj = value ? new Date(value) : new Date();
+  
+  const formatDateForInput = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const formatTimeForInput = (d: Date) => {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState(formatDateForInput(dateObj));
+  const [selectedTime, setSelectedTime] = useState(formatTimeForInput(dateObj));
+
+  const updateCombined = (dStr: string, tStr: string) => {
+    setSelectedDate(dStr);
+    setSelectedTime(tStr);
+    if (dStr && tStr) {
+      try {
+        const combined = new Date(`${dStr}T${tStr}:00`).toISOString();
+        onChange(combined);
+      } catch {
+        // Fallback
+      }
+    }
+  };
+
+  const setShortcut = (daysToAdd: number, timeStr = "10:00") => {
+    const target = new Date();
+    target.setDate(target.getDate() + daysToAdd);
+    const dStr = formatDateForInput(target);
+    updateCombined(dStr, timeStr);
+  };
+
+  const timeSlots = [
+    { label: "09:00 AM", value: "09:00" },
+    { label: "10:00 AM", value: "10:00" },
+    { label: "11:00 AM", value: "11:00" },
+    { label: "01:00 PM", value: "13:00" },
+    { label: "02:00 PM", value: "14:00" },
+    { label: "03:00 PM", value: "15:00" },
+    { label: "04:00 PM", value: "16:00" },
+    { label: "05:00 PM", value: "17:00" },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        {label}
+      </label>
+
+      {/* Quick Date Chips */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setShortcut(0, selectedTime)}
+          className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border bg-muted hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all"
+        >
+          Today
+        </button>
+        <button
+          type="button"
+          onClick={() => setShortcut(1, selectedTime)}
+          className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border bg-muted hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all"
+        >
+          Tomorrow
+        </button>
+        <button
+          type="button"
+          onClick={() => setShortcut(2, selectedTime)}
+          className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border bg-muted hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all"
+        >
+          In 2 Days
+        </button>
+        <button
+          type="button"
+          onClick={() => setShortcut(7, selectedTime)}
+          className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border bg-muted hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all"
+        >
+          Next Week
+        </button>
+      </div>
+
+      {/* Modern Split Date & Time Inputs */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="relative">
+          <Input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => updateCombined(e.target.value, selectedTime)}
+            className="bg-muted text-foreground border-border text-xs rounded-xl h-10 shadow-xs focus:border-primary"
+          />
+        </div>
+        <div>
+          <select
+            value={selectedTime}
+            onChange={(e) => updateCombined(selectedDate, e.target.value)}
+            className="flex h-10 w-full rounded-xl border border-border bg-muted px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+          >
+            {timeSlots.map((slot) => (
+              <option key={slot.value} value={slot.value}>
+                {slot.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: ScheduleMeetingModalProps) {
   const [title, setTitle] = useState(deal ? `Meeting with ${deal.contact?.name || deal.title}` : "Client Meeting");
-  const [dateTime, setDateTime] = useState("");
+  const [dateTime, setDateTime] = useState(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 1, 0, 0, 0);
+    return d.toISOString();
+  });
   const [duration, setDuration] = useState("30");
   const [createMeet, setCreateMeet] = useState(true);
   const [description, setDescription] = useState("");
@@ -165,9 +294,6 @@ export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: Sc
     }
     setSaving(true);
     try {
-      const startIso = new Date(dateTime).toISOString();
-      const attendees = attendeeEmail.trim() ? [attendeeEmail.trim()] : [];
-
       const res = await fetch("/api/crm/activities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,27 +303,31 @@ export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: Sc
           type: createMeet ? "google_meet" : "meeting",
           title: title.trim(),
           description: description.trim() || null,
-          scheduled_at: startIso,
+          scheduled_at: dateTime,
           duration_minutes: parseInt(duration, 10) || 30,
           status: "pending",
-          next_follow_up_at: startIso,
+          next_follow_up_at: dateTime,
+          create_google_event: createMeet,
+          attendee_email: attendeeEmail.trim() || null,
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        toast.error("Failed to schedule meeting");
+        toast.error(data.error || "Failed to schedule meeting");
         return;
       }
 
       toast.success(
         createMeet
-          ? "Meeting scheduled! Activity added to CRM & Google Calendar."
+          ? "Meeting scheduled & Google Meet link generated!"
           : "Meeting scheduled on CRM timeline!"
       );
       onOpenChange(false);
       onSuccess();
     } catch {
-      toast.error("An error occurred");
+      toast.error("An error occurred while scheduling");
     } finally {
       setSaving(false);
     }
@@ -205,58 +335,51 @@ export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: Sc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-foreground">
-            <Calendar className="size-5 text-blue-400" />
+          <DialogTitle className="flex items-center gap-2 text-foreground text-lg">
+            <Calendar className="size-5 text-primary" />
             Schedule Meeting / Google Meet
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Meeting Title
             </label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Product Demo & Proposal Discussion"
-              className="bg-muted text-foreground border-border text-sm"
+              className="bg-muted text-foreground border-border text-sm rounded-xl h-10"
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2">
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Date & Time
-              </label>
-              <Input
-                type="datetime-local"
-                value={dateTime}
-                onChange={(e) => setDateTime(e.target.value)}
-                className="bg-muted text-foreground border-border text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Duration
-              </label>
-              <select
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-border bg-muted px-2 py-2 text-xs text-foreground outline-none focus:border-primary"
-              >
-                <option value="15">15 min</option>
-                <option value="30">30 min</option>
-                <option value="45">45 min</option>
-                <option value="60">1 hour</option>
-                <option value="90">1.5 hours</option>
-              </select>
-            </div>
+          <ModernDateTimePicker
+            value={dateTime}
+            onChange={(iso) => setDateTime(iso)}
+            label="Meeting Date & Time"
+          />
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Duration
+            </label>
+            <select
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              className="flex h-10 w-full rounded-xl border border-border bg-muted px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+            >
+              <option value="15">15 min</option>
+              <option value="30">30 min</option>
+              <option value="45">45 min</option>
+              <option value="60">1 hour</option>
+              <option value="90">1.5 hours</option>
+            </select>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Client Email (for Calendar invite)
             </label>
             <Input
@@ -264,12 +387,12 @@ export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: Sc
               value={attendeeEmail}
               onChange={(e) => setAttendeeEmail(e.target.value)}
               placeholder="client@company.com"
-              className="bg-muted text-foreground border-border text-sm"
+              className="bg-muted text-foreground border-border text-sm rounded-xl h-10"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Agenda & Notes
             </label>
             <textarea
@@ -277,35 +400,35 @@ export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: Sc
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Meeting agenda, discussion topics..."
               rows={2}
-              className="w-full rounded-md border border-border bg-muted p-2 text-xs text-foreground outline-none focus:border-primary"
+              className="w-full rounded-xl border border-border bg-muted p-2.5 text-xs text-foreground outline-none focus:border-primary"
             />
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-xs text-blue-300">
-            <Video className="size-4 shrink-0 text-blue-400" />
+          <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-3.5 text-xs text-foreground">
+            <Video className="size-5 shrink-0 text-primary" />
             <div className="flex-1">
-              <strong>Generate Google Meet Link</strong>
-              <p className="text-[11px] text-muted-foreground">
-                Creates event in Google Calendar and generates video meet link.
+              <strong className="text-foreground font-semibold">Generate Google Meet Link</strong>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Creates event in Google Calendar and generates video meet link automatically.
               </p>
             </div>
             <input
               type="checkbox"
               checked={createMeet}
               onChange={(e) => setCreateMeet(e.target.checked)}
-              className="size-4 rounded border-border"
+              className="size-4 rounded border-border accent-primary cursor-pointer"
             />
           </div>
         </div>
         <DialogFooter className="mt-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving} className="rounded-xl">
             Cancel
           </Button>
           <Button
             size="sm"
             onClick={handleSubmit}
             disabled={saving || !title.trim() || !dateTime}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
           >
             {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : "Schedule Meeting"}
           </Button>

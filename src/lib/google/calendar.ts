@@ -63,8 +63,8 @@ export async function createGoogleCalendarEvent(
 ): Promise<GoogleMeetingResult | null> {
   const admin = supabaseAdmin();
 
-  // 1. Get user's Google Calendar Integration
-  const { data: integration } = await admin
+  // 1. Get user's Google Calendar Integration (or fallback to account integration)
+  let { data: integration } = await admin
     .from("google_calendar_integrations")
     .select("*")
     .eq("account_id", input.accountId)
@@ -72,7 +72,18 @@ export async function createGoogleCalendarEvent(
     .eq("is_active", true)
     .maybeSingle();
 
+  if (!integration) {
+    const { data: accountIntegration } = await admin
+      .from("google_calendar_integrations")
+      .select("*")
+      .eq("account_id", input.accountId)
+      .eq("is_active", true)
+      .maybeSingle();
+    integration = accountIntegration;
+  }
+
   if (!integration || !integration.access_token) {
+    console.error("No active Google Calendar integration found for account:", input.accountId);
     return null;
   }
 
