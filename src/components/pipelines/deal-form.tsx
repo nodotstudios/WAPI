@@ -75,6 +75,41 @@ export function DealForm({
   const [statusAction, setStatusAction] = useState<DealStatus | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pushingToMeta, setPushingToMeta] = useState(false);
+
+  const handlePushToMeta = async () => {
+    if (!deal) return;
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) {
+      toast.error("Please enter a valid deal amount before pushing to Meta.");
+      return;
+    }
+    setPushingToMeta(true);
+    try {
+      const res = await fetch("/api/meta/capi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: contactId || undefined,
+          deal_id: deal.id,
+          event_name: "Purchase",
+          value: num,
+          currency,
+          content_name: title.trim() || deal.title,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(`Meta CAPI Error: ${data.error || "Failed to push conversion"}`);
+        return;
+      }
+      toast.success(`Successfully pushed ${currency} ${num.toFixed(2)} Purchase conversion to Facebook Pixel!`);
+    } catch {
+      toast.error("Failed to push conversion to Meta");
+    } finally {
+      setPushingToMeta(false);
+    }
+  };
 
   // Reset the form fields every time the sheet opens or its input
   // props change. This is a legitimate prop-driven sync; the rule is
@@ -429,6 +464,29 @@ export function DealForm({
           </div>
 
           <div className="border-t border-border/50 bg-popover/80 p-4">
+            {deal && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handlePushToMeta}
+                disabled={pushingToMeta || !value}
+                className="w-full mb-3 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
+              >
+                {pushingToMeta ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Pushing to Facebook Pixel...
+                  </>
+                ) : (
+                  <>
+                    <DollarSign className="mr-1.5 size-4" />
+                    Push Paid Conversion to Facebook Pixel ({currency} {value || "0"})
+                  </>
+                )}
+              </Button>
+            )}
+
             <div className="flex gap-2">
               <Button
                 variant="outline"

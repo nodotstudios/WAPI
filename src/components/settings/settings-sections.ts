@@ -54,7 +54,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   security: { id: 'security', label: 'Login & security', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
   whatsapp: { id: 'whatsapp', label: 'WhatsApp Web', icon: PlugZap, group: 'workspace' },
-  'facebook-ads': { id: 'facebook-ads', label: 'Facebook Ads & CAPI', icon: Globe, group: 'workspace' },
+  'facebook-ads': { id: 'facebook-ads', label: 'Facebook Pixel', icon: Globe, group: 'workspace' },
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },

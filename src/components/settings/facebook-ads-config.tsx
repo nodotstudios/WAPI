@@ -149,8 +149,8 @@ export function FacebookAdsConfig() {
   return (
     <div className="space-y-6">
       <SettingsPanelHead
-        title="Facebook Ads & Conversions API (CAPI)"
-        description="Push server-side conversion events (Sales, Leads, ROAS) directly to Meta Ads Manager so Facebook's AI algorithm optimizes for high-paying buyers."
+        title="Facebook Pixel"
+        description="Push server-side conversion events (Sales, Leads, ROAS) directly to Meta Ads Manager so Facebook's algorithm optimizes for high-paying buyers."
         action={
           <Button
             onClick={handleSave}
