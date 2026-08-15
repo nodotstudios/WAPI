@@ -782,6 +782,8 @@ export interface QuickReply {
   filename?: string | null;
   /** Set when `kind === 'interactive'`. */
   interactive_payload?: InteractiveMessagePayload | null;
+  /** Trigger keywords for smart auto-suggestions in inbox message thread. */
+  keywords?: string[] | string | null;
   created_at: string;
   updated_at: string;
 }

@@ -44,6 +44,7 @@ export async function POST(request: Request) {
   const media_url: string | null = typeof body.media_url === 'string' ? body.media_url : null
   const media_type: string | null = typeof body.media_type === 'string' ? body.media_type : null
   const filename: string | null = typeof body.filename === 'string' ? body.filename : null
+  const keywords = Array.isArray(body.keywords) ? body.keywords : (typeof body.keywords === 'string' ? body.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : null)
 
   if (kind === 'text' && !content_text?.trim()) {
     return NextResponse.json(
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
       media_url,
       media_type,
       filename,
+      keywords,
     })
     .select()
     .single()

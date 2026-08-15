@@ -140,7 +140,7 @@ export async function createGoogleCalendarEvent(
 
   try {
     const calendarId = encodeURIComponent(integration.calendar_id || "primary");
-    const url = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?conferenceDataVersion=1`;
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?conferenceDataVersion=1&sendUpdates=all`;
 
     const res = await fetch(url, {
       method: "POST",

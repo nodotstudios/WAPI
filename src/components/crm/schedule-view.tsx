@@ -40,7 +40,7 @@ interface ScheduleViewProps {
 }
 
 export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
-  const [viewMode, setViewMode] = useState<"row" | "calendar">("row");
+  const [viewMode, setViewMode] = useState<"weekly" | "row" | "monthly">("weekly");
   const [activities, setActivities] = useState<CrmActivity[]>([]);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
@@ -99,25 +99,34 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
   const filteredActivities = useMemo(() => {
     return activities.filter((act) => {
       // User filter
-      if (selectedUserId && act.user_id !== selectedUserId) return false;
-
+      if (selectedUserId && act.user_id !== selectedUserId) {
+        return false;
+      }
       // Status filter
+      if (statusFilter === "pending") {
+        return act.status === "pending";
+      }
+      if (statusFilter === "completed") {
+        return act.status === "completed";
+      }
       if (statusFilter === "today") {
-        if (!act.scheduled_at) return false;
-        return isToday(new Date(act.scheduled_at));
+        return act.scheduled_at && isToday(new Date(act.scheduled_at));
       }
       if (statusFilter === "overdue") {
-        if (!act.scheduled_at || act.status !== "pending") return false;
-        return isPast(new Date(act.scheduled_at)) && !isToday(new Date(act.scheduled_at));
+        return act.status === "pending" && act.scheduled_at && isPast(new Date(act.scheduled_at)) && !isToday(new Date(act.scheduled_at));
       }
-      if (statusFilter === "pending" && act.status !== "pending") return false;
-      if (statusFilter === "completed" && act.status !== "completed") return false;
-
       return true;
     });
   }, [activities, selectedUserId, statusFilter]);
 
-  // Calendar days
+  // Weekly days
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const end = endOfWeek(currentDate, { weekStartsOn: 1 });
+    return eachDayOfInterval({ start, end });
+  }, [currentDate]);
+
+  // Calendar days for Monthly
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 });
     const end = endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 });
@@ -159,23 +168,35 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-9 rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none focus:border-primary"
+            className="h-9 rounded-lg border border-border bg-card px-3 text-xs text-foreground outline-none focus:border-primary font-medium"
           >
-            <option value="all">All Statuses</option>
-            <option value="today">Today&apos;s Schedule</option>
-            <option value="overdue">Overdue Activities</option>
-            <option value="pending">Pending Only</option>
-            <option value="completed">Completed</option>
+            <option value="all">⚡ All Statuses</option>
+            <option value="pending">⏳ Pending Only</option>
+            <option value="completed">✅ Completed Only</option>
+            <option value="today">📅 Today&apos;s Schedule</option>
+            <option value="overdue">⚠️ Overdue Activities</option>
           </select>
 
           {/* View Mode Toggle */}
           <div className="flex items-center gap-1 rounded-lg border border-border bg-muted p-1">
             <button
               type="button"
+              onClick={() => setViewMode("weekly")}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                viewMode === "weekly"
+                  ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <CalendarIcon className="size-3.5" />
+              Weekly View
+            </button>
+            <button
+              type="button"
               onClick={() => setViewMode("row")}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
                 viewMode === "row"
-                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  ? "bg-background text-foreground shadow-xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -184,15 +205,15 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
             </button>
             <button
               type="button"
-              onClick={() => setViewMode("calendar")}
+              onClick={() => setViewMode("monthly")}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                viewMode === "calendar"
-                  ? "bg-background text-foreground shadow-sm font-semibold"
+                viewMode === "monthly"
+                  ? "bg-background text-foreground shadow-xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <CalendarIcon className="size-3.5" />
-              Calendar View
+              Monthly
             </button>
           </div>
         </div>
@@ -338,10 +359,135 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
             })}
           </div>
         )
-      ) : (
-        /* CALENDAR MONTH/WEEK VIEW */
+      ) : viewMode === "weekly" ? (
+        /* WEEKLY CALENDAR VIEW */
         <div className="rounded-2xl border border-border bg-card shadow-sm p-5 space-y-4">
-          {/* Month Header Navigation */}
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+              <CalendarIcon className="size-4.5 text-primary" />
+              Week of {format(startOfWeek(currentDate, { weekStartsOn: 1 }), "MMM d")} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), "MMM d, yyyy")}
+            </h3>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentDate(subDays(currentDate, 7))}
+                className="h-8 px-2.5 text-xs"
+              >
+                <ChevronLeft className="size-3.5 mr-1" /> Prev Week
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentDate(new Date())}
+                className="h-8 text-xs px-3 font-semibold"
+              >
+                This Week
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentDate(addDays(currentDate, 7))}
+                className="h-8 px-2.5 text-xs"
+              >
+                Next Week <ChevronRight className="size-3.5 ml-1" />
+              </Button>
+            </div>
+          </div>
+
+          {/* 7 Days Column Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+            {weekDays.map((day, idx) => {
+              const dayActivities = filteredActivities.filter(
+                (act) => act.scheduled_at && isSameDay(new Date(act.scheduled_at), day)
+              );
+              const isTodayCell = isToday(day);
+
+              return (
+                <div
+                  key={idx}
+                  className={`min-h-[280px] rounded-xl border p-3 text-xs flex flex-col justify-between transition-all ${
+                    isTodayCell
+                      ? "border-primary/60 bg-primary/5 shadow-xs"
+                      : "border-border/70 bg-muted/20"
+                  }`}
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-border/50">
+                    <span className="font-semibold text-muted-foreground uppercase text-[11px]">
+                      {format(day, "EEE")}
+                    </span>
+                    <span
+                      className={`size-6 flex items-center justify-center rounded-full text-xs font-mono font-bold ${
+                        isTodayCell
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground"
+                      }`}
+                    >
+                      {format(day, "d")}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 mt-2 flex-1 overflow-y-auto max-h-[320px]">
+                    {dayActivities.length === 0 ? (
+                      <div className="text-[11px] text-muted-foreground/60 text-center py-6">
+                        No events
+                      </div>
+                    ) : (
+                      dayActivities.map((act) => {
+                        const isMeet = act.type === "meeting" || act.type === "google_meet";
+                        const isPending = act.status === "pending";
+
+                        return (
+                          <div
+                            key={act.id}
+                            className={`rounded-xl border p-2 space-y-1 transition-all ${
+                              isPending
+                                ? "bg-card border-border shadow-xs"
+                                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-semibold text-[11px] text-foreground truncate flex items-center gap-1">
+                                {isMeet ? <Video className="size-3 text-blue-400 shrink-0" /> : <Phone className="size-3 text-emerald-400 shrink-0" />}
+                                {act.title}
+                              </span>
+                            </div>
+
+                            {act.scheduled_at && (
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                🕒 {format(new Date(act.scheduled_at), "h:mm a")}
+                              </div>
+                            )}
+
+                            {act.contact && (
+                              <div className="text-[10px] text-muted-foreground truncate">
+                                👤 {act.contact.name || act.contact.phone}
+                              </div>
+                            )}
+
+                            {act.google_meet_url && (
+                              <a
+                                href={act.google_meet_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-blue-400 hover:underline"
+                              >
+                                Join Google Meet <ExternalLink className="size-2.5" />
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        /* CALENDAR MONTH VIEW */
+        <div className="rounded-2xl border border-border bg-card shadow-sm p-5 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-border">
             <h3 className="text-base font-bold text-foreground">
               {format(currentDate, "MMMM yyyy")}
@@ -374,7 +520,6 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
             </div>
           </div>
 
-          {/* Weekday Labels */}
           <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted-foreground">
             <div>Mon</div>
             <div>Tue</div>
@@ -385,7 +530,6 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
             <div>Sun</div>
           </div>
 
-          {/* Calendar Grid */}
           <div className="grid grid-cols-7 gap-1.5">
             {calendarDays.map((day, idx) => {
               const dayActivities = filteredActivities.filter(

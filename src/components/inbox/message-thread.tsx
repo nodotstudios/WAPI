@@ -1549,6 +1549,7 @@ export function MessageThread({
         onOpenTemplates={handleOpenTemplates}
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
+        messages={messages}
       />
 
       <TemplatePicker

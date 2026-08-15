@@ -387,14 +387,14 @@ function PipelinesPageInner() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Pipeline selector dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors data-[popup-open]:bg-muted shadow-sm">
+            <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm text-foreground hover:bg-muted transition-colors data-[popup-open]:bg-muted shadow-xs font-medium">
               <GitBranch className="h-4 w-4 text-primary" />
               <span className="font-semibold">
                 {selectedPipeline?.name ?? t("selectPipeline")}
               </span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-muted-foreground ml-1" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64 border-border bg-popover text-popover-foreground">
+            <DropdownMenuContent align="start" className="w-64 border-border bg-popover text-popover-foreground shadow-lg">
               {pipelines.length === 0 && (
                 <DropdownMenuItem disabled className="text-muted-foreground">
                   {t("noPipelinesYet")}
@@ -419,100 +419,6 @@ function PipelinesPageInner() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-
-          {/* CRM Navigation Tabs */}
-          <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border">
-            <button
-              type="button"
-              onClick={() => switchView("dashboard")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "dashboard"
-                  ? "bg-primary text-primary-foreground shadow-sm font-bold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <TrendingUp className="size-3.5" />
-              Dashboard
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchView("active")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "active"
-                  ? "bg-background text-foreground shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <LayoutGrid className="size-3.5" />
-              Pipeline ({activeDeals.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchView("schedule")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "schedule"
-                  ? "bg-background text-foreground shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Clock className="size-3.5" />
-              Schedule
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchView("won")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "won"
-                  ? "bg-emerald-500/20 text-emerald-400 shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-emerald-400"
-              }`}
-            >
-              <Trophy className="size-3.5" />
-              Won ({wonDeals.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchView("lost")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "lost"
-                  ? "bg-red-500/20 text-red-400 shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-red-400"
-              }`}
-            >
-              <XCircle className="size-3.5" />
-              Lost ({lostDeals.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchView("archive")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "archive"
-                  ? "bg-background text-foreground shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Archive className="size-3.5" />
-              All Records ({deals.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => switchView("offerings")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                currentView === "offerings"
-                  ? "bg-background text-foreground shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Package className="size-3.5" />
-              Offerings
-            </button>
-          </div>
         </div>
 
         {/* Action Buttons */}

@@ -26,9 +26,11 @@ import {
   Check,
   ChevronRight,
   Flame,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -65,6 +67,8 @@ export function DealDetailWorkspace({
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [wonModalOpen, setWonModalOpen] = useState(false);
   const [lostModalOpen, setLostModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadDealAndTimeline = useCallback(async () => {
     if (!dealId) return;
@@ -181,6 +185,27 @@ export function DealDetailWorkspace({
     }
   };
 
+  const handleDeleteDeal = async () => {
+    if (!deal) return;
+    setDeleting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("deals").delete().eq("id", deal.id);
+      if (error) {
+        toast.error("Failed to delete deal: " + error.message);
+        return;
+      }
+      toast.success("Deal deleted successfully from CRM");
+      onOpenChange(false);
+      onDealUpdated();
+    } catch {
+      toast.error("An error occurred while deleting deal");
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
+    }
+  };
+
   const currentStatus = deal?.status || "open";
   const sortedStages = [...stages].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const currentStageIndex = sortedStages.findIndex((s) => s.id === deal?.stage_id);
@@ -196,7 +221,7 @@ export function DealDetailWorkspace({
           ) : (
             <div className="flex flex-col h-full overflow-hidden">
               {/* Top Banner & Client Header Card */}
-              <div className="p-6 border-b border-border bg-gradient-to-b from-muted/50 to-card space-y-4">
+              <div className="p-6 pr-14 border-b border-border bg-gradient-to-b from-muted/50 to-card space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   {/* Deal Title & Contact Identity */}
                   <div className="space-y-1.5 flex-1 min-w-0">
@@ -354,9 +379,20 @@ export function DealDetailWorkspace({
                         onClick={handleReopenDeal}
                         className="h-8.5 gap-1.5 text-xs border-border text-foreground hover:bg-muted"
                       >
-                        Reopen to Active Pipeline
+                        Re-open Deal
                       </Button>
                     )}
+
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      className="h-8.5 gap-1.5 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                      title="Delete Offer / Deal"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Delete Deal
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -632,6 +668,41 @@ export function DealDetailWorkspace({
               onDealUpdated();
             }}
           />
+
+          <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+            <DialogContent className="sm:max-w-sm bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-400">
+                  <Trash2 className="size-5" />
+                  Delete Offer / Deal
+                </DialogTitle>
+              </DialogHeader>
+              <div className="py-2 text-xs text-muted-foreground">
+                <p className="text-foreground font-medium mb-1">
+                  Are you sure you want to delete <strong className="text-red-400">"{deal.title}"</strong>?
+                </p>
+                <p>This action will permanently delete this deal record and remove it from your CRM pipeline.</p>
+              </div>
+              <DialogFooter className="mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleDeleteDeal}
+                  disabled={deleting}
+                  className="bg-red-600 text-white hover:bg-red-700"
+                >
+                  {deleting ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : "Delete Deal"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </>

@@ -5,6 +5,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useMemo,
   KeyboardEvent,
 } from "react";
 import {
@@ -103,6 +104,7 @@ interface MessageComposerProps {
   onOpenTemplates?: () => void;
   replyTo?: ReplyDraft | null;
   onClearReply?: () => void;
+  messages?: any[];
 }
 
 function formatDuration(seconds: number): string {
@@ -125,6 +127,7 @@ export function MessageComposer({
   onOpenTemplates,
   replyTo,
   onClearReply,
+  messages = [],
 }: MessageComposerProps) {
   const t = useTranslations("Inbox.composer");
 
@@ -133,8 +136,68 @@ export function MessageComposer({
   const [drafting, setDrafting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Quick-reply picker state.
+  // Quick-reply picker & smart suggestion state.
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
+  const [quickRepliesList, setQuickRepliesList] = useState<QuickReply[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/quick-replies")
+      .then((res) => res.json())
+      .then((data) => {
+        if (active && data && Array.isArray(data.quick_replies)) {
+          setQuickRepliesList(data.quick_replies);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Compute smart keyword suggestions from last 5 inbound customer messages
+  const smartSuggestions = useMemo(() => {
+    if (!messages || messages.length === 0 || quickRepliesList.length === 0) {
+      return [];
+    }
+
+    const last5Inbound = messages
+      .slice(-5)
+      .filter((m: any) => {
+        const dir = m.direction || m.direction_type;
+        const isFromMe = m.from_me || m.is_from_me || dir === "outbound";
+        return !isFromMe;
+      })
+      .map((m: any) => (m.content_text || m.text || m.body || "").toLowerCase())
+      .join(" ");
+
+    if (!last5Inbound.trim()) return [];
+
+    const matches: QuickReply[] = [];
+    for (const qr of quickRepliesList) {
+      let keywordsArr: string[] = [];
+      if (Array.isArray(qr.keywords)) {
+        keywordsArr = qr.keywords;
+      } else if (typeof qr.keywords === "string" && qr.keywords) {
+        keywordsArr = qr.keywords.split(",").map((k) => k.trim());
+      }
+
+      // Add words from title as well
+      const titleWords = qr.title.split(/\s+/).filter((w) => w.length >= 4);
+      const allSearchTokens = Array.from(new Set([...keywordsArr, ...titleWords])).filter(Boolean);
+
+      const matched = allSearchTokens.some((token) => {
+        const cleanToken = token.toLowerCase().trim();
+        return cleanToken.length >= 3 && last5Inbound.includes(cleanToken);
+      });
+
+      if (matched) {
+        matches.push(qr);
+      }
+    }
+
+    return matches.slice(0, 4);
+  }, [messages, quickRepliesList]);
 
   // Media attachment state. `draft` holds an uploaded-but-not-yet-sent
   // attachment; `busy` covers the upload/transcode window.
@@ -544,7 +607,28 @@ export function MessageComposer({
           </Button>
         </div>
       ) : (
-        <div className="flex items-end gap-2">
+        <div className="space-y-2">
+          {smartSuggestions.length > 0 && !readOnly && !inputsDisabled && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <span className="text-[10px] font-semibold text-primary uppercase tracking-wider flex items-center gap-1 shrink-0 bg-primary/10 px-2 py-1 rounded-lg border border-primary/20">
+                <Sparkles className="size-3 text-amber-400" />
+                Suggested:
+              </span>
+              {smartSuggestions.map((qr) => (
+                <button
+                  key={qr.id}
+                  type="button"
+                  onClick={() => handlePickQuickReply(qr)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border border-primary/30 bg-primary/10 text-foreground hover:bg-primary/20 hover:border-primary/50 transition-all shrink-0 shadow-xs"
+                >
+                  <Zap className="size-3 text-primary shrink-0" />
+                  <span>{qr.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-end gap-2">
           {/* Attach menu — photo / video / document / voice. */}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -645,6 +729,7 @@ export function MessageComposer({
             <Send className="h-4 w-4 text-primary-foreground" />
           </GatedButton>
         </div>
+      </div>
       )}
 
       {!draft && !recording && (

@@ -34,6 +34,13 @@ export async function PATCH(
   if ('media_url' in body) update.media_url = body.media_url ?? null
   if ('media_type' in body) update.media_type = body.media_type ?? null
   if ('filename' in body) update.filename = body.filename ?? null
+  if ('keywords' in body) {
+    update.keywords = Array.isArray(body.keywords)
+      ? body.keywords
+      : (typeof body.keywords === 'string'
+        ? body.keywords.split(',').map((k: string) => k.trim()).filter(Boolean)
+        : null)
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ ok: true })

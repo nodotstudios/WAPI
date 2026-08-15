@@ -155,6 +155,7 @@ export function QuickRepliesManager() {
       media_url: draft.media_url || null,
       media_type: draft.media_type || null,
       filename: draft.filename || null,
+      keywords: (draft as any).keywords || null,
     };
 
     setSaving(true);
@@ -366,7 +367,7 @@ export function QuickRepliesManager() {
                   {draft.media_url ? "Caption / Accompanying Text" : "Message Text"}
                 </label>
                 <Textarea
-                  value={draft.content_text}
+                  value={draft.content_text || ""}
                   onChange={(e) => setDraft({ ...draft, content_text: e.target.value })}
                   placeholder={
                     draft.media_url
@@ -375,6 +376,26 @@ export function QuickRepliesManager() {
                   }
                   className="min-h-28 bg-muted text-foreground border-border text-sm"
                 />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground flex items-center justify-between">
+                  <span>Trigger Keywords (Smart Auto-Suggestions)</span>
+                  <span className="text-[10px] text-primary">Comma separated</span>
+                </label>
+                <Input
+                  value={
+                    Array.isArray((draft as any).keywords)
+                      ? (draft as any).keywords.join(", ")
+                      : (draft as any).keywords || ""
+                  }
+                  onChange={(e) => setDraft({ ...draft, keywords: e.target.value } as any)}
+                  placeholder="e.g. process, pricing, demo, steps"
+                  className="bg-muted text-foreground border-border text-xs rounded-xl h-10"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  When a customer mentions any of these words in chat, a quick reply recommendation pill will appear above the composer.
+                </p>
               </div>
             </div>
           )}
