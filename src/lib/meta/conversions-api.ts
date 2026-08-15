@@ -98,14 +98,11 @@ export async function sendMetaConversionEvent(
       event_name: eventName === "Custom" && customEventName ? customEventName : eventName,
       event_time: eventTime,
       event_id: finalEventId,
-      action_source: "system_generated",
+      action_source: "website",
+      event_source_url: eventSourceUrl || "https://wapi.chat",
       user_data: userData,
       custom_data: customData,
     };
-
-    if (eventSourceUrl) {
-      eventPayload.event_source_url = eventSourceUrl;
-    }
 
     const bodyPayload: Record<string, unknown> = {
       data: [eventPayload],
