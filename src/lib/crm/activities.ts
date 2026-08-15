@@ -49,12 +49,12 @@ export async function createCrmActivity(input: CreateActivityInput): Promise<Crm
   const { data, error } = await admin
     .from("crm_activities")
     .insert(payload)
-    .select("*, user:profiles(*), contact:contacts(*), deal:deals(*)")
+    .select("*, contact:contacts(*), deal:deals(*)")
     .single();
 
   if (error) {
     console.error("Failed to create CRM activity:", error);
-    return null;
+    throw new Error(error.message);
   }
 
   // If next follow-up is specified and dealId exists, update the deal

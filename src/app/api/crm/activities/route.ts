@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
     let query = supabaseAdmin()
       .from("crm_activities")
-      .select("*, user:profiles(*), contact:contacts(*), deal:deals(*)")
+      .select("*, contact:contacts(*), deal:deals(*)")
       .eq("account_id", accountId);
 
     if (dealId) query = query.eq("deal_id", dealId);
