@@ -7,7 +7,7 @@ import {
   Trash2,
   Loader2,
   RefreshCw,
-  AlertCircle,
+  AlertCircle, CheckCircle2,
   X,
   Pencil,
   RotateCcw,
@@ -483,6 +483,17 @@ export function TemplateManager() {
 
   return (
     <section className="animate-in fade-in-50 space-y-4 duration-200">
+      
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-200 mb-4">
+        <div className="flex items-center gap-2 font-medium text-emerald-300">
+          <CheckCircle2 className="size-5 text-emerald-400" />
+          QR Scan Mode Active (WhatsApp Web)
+        </div>
+        <p className="mt-1 text-xs text-emerald-200/80">
+          Meta HSM pre-approved templates are only required when using Meta Cloud API. In QR Scan mode, you can send direct text and media messages to any contact directly from the Inbox or Broadcasts without pre-approved templates.
+        </p>
+      </div>
+
       <SettingsPanelHead
         title={t('title')}
         description={t('description')}

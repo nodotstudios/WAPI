@@ -669,7 +669,7 @@ export function WhatsAppConfig() {
                 }`}
               >
                 <Zap className="size-6 mb-2 text-primary" />
-                <span className="text-sm font-semibold">Meta Official Cloud API</span>
+                <span className="text-sm font-semibold flex items-center gap-2">Meta Official Cloud API <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-normal">(Meta Only)</span></span>
                 <span className="text-xs text-muted-foreground mt-1">Requires Access Token & Phone Number ID</span>
               </button>
 
