@@ -131,6 +131,9 @@ export async function sendEvolutionMedia(
       },
       body: JSON.stringify({
         number: cleanPhone,
+        mediatype: mediaType,
+        media: mediaUrl,
+        caption: caption || '',
         mediaMessage: {
           mediatype: mediaType,
           media: mediaUrl,
