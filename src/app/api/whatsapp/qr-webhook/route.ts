@@ -112,15 +112,25 @@ export async function POST(request: Request) {
       else if (messageObj.audioMessage) contentType = 'audio'
       else if (messageObj.videoMessage) contentType = 'video'
 
-      // Find active whatsapp_config by instance_name
-      const { data: config } = await supabaseAdmin()
+      // Find active whatsapp_config by instance_name or fallback to any configured row
+      let { data: config } = await supabaseAdmin()
         .from('whatsapp_config')
         .select('*')
         .eq('instance_name', instance)
         .maybeSingle()
 
       if (!config) {
-        return NextResponse.json({ error: 'Instance not configured' }, { status: 404 })
+        const { data: fallback } = await supabaseAdmin()
+          .from('whatsapp_config')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        config = fallback
+      }
+
+      if (!config) {
+        return NextResponse.json({ error: 'Instance not configured in database' }, { status: 404 })
       }
 
       const user_id = config.user_id
