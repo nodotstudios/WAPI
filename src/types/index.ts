@@ -378,6 +378,7 @@ export type DealStatus = 'open' | 'won' | 'lost';
 export interface Deal {
   id: string;
   user_id: string;
+  account_id?: string;
   pipeline_id: string;
   stage_id: string;
   /**
@@ -393,11 +394,87 @@ export interface Deal {
   notes?: string;
   expected_close_date?: string;
   status?: DealStatus;
+  won_at?: string | null;
+  lost_at?: string | null;
+  won_reason?: string | null;
+  lost_reason?: string | null;
+  lost_notes?: string | null;
+  source?: string | null;
+  next_follow_up_at?: string | null;
+  last_activity_at?: string;
   created_at: string;
   updated_at?: string;
   contact?: Contact;
   stage?: PipelineStage;
   assignee?: Profile;
+}
+
+export interface DealStageHistory {
+  id: string;
+  account_id?: string;
+  deal_id: string;
+  from_stage_id?: string | null;
+  to_stage_id: string;
+  user_id?: string | null;
+  created_at: string;
+  from_stage?: PipelineStage;
+  to_stage?: PipelineStage;
+  user?: Profile;
+}
+
+export type CrmActivityType =
+  | 'call'
+  | 'meeting'
+  | 'google_meet'
+  | 'email'
+  | 'note'
+  | 'follow_up'
+  | 'task'
+  | 'stage_change';
+
+export type CrmActivityStatus =
+  | 'pending'
+  | 'completed'
+  | 'cancelled'
+  | 'rescheduled'
+  | 'overdue';
+
+export interface CrmActivity {
+  id: string;
+  account_id?: string;
+  deal_id?: string | null;
+  contact_id?: string | null;
+  user_id: string;
+  type: CrmActivityType;
+  title: string;
+  description?: string | null;
+  scheduled_at?: string | null;
+  duration_minutes?: number;
+  status: CrmActivityStatus;
+  call_outcome?: string | null;
+  call_notes?: string | null;
+  google_calendar_event_id?: string | null;
+  google_meet_url?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  user?: Profile;
+  contact?: Contact;
+  deal?: Deal;
+}
+
+export interface GoogleCalendarIntegration {
+  id: string;
+  account_id: string;
+  user_id: string;
+  access_token: string;
+  refresh_token: string;
+  token_expiry?: string | null;
+  calendar_id?: string;
+  email?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';

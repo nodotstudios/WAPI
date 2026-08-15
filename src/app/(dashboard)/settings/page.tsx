@@ -13,6 +13,7 @@ import { SecurityPanel } from '@/components/settings/security-panel';
 import { AppearancePanel } from '@/components/settings/appearance-panel';
 import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
 import { FacebookAdsConfig } from '@/components/settings/facebook-ads-config';
+import { GoogleCalendarConfig } from '@/components/settings/google-calendar-config';
 import { DataRetentionSettings } from '@/components/settings/data-retention-settings';
 import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
@@ -77,6 +78,7 @@ function SettingsPageInner() {
     appearance: <AppearancePanel />,
     whatsapp: <WhatsAppConfig />,
     'facebook-ads': <FacebookAdsConfig />,
+    'google-calendar': <GoogleCalendarConfig />,
     'data-retention': <DataRetentionSettings />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,

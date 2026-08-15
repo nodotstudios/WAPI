@@ -92,6 +92,12 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
         )}
       </div>
 
+      {deal.next_follow_up_at && (
+        <div className="mt-2 flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] text-primary font-medium">
+          <span>⏰ Follow-up: {new Date(deal.next_follow_up_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+        </div>
+      )}
+
       {assigneeLabel && (
         <div className="mt-2 flex items-center justify-end">
           <span
