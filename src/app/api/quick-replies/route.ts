@@ -53,21 +53,37 @@ export async function POST(request: Request) {
     )
   }
 
-  const { data, error } = await supabaseAdmin()
+  const insertPayload: Record<string, any> = {
+    account_id: ctx.accountId,
+    user_id: ctx.userId,
+    title,
+    kind,
+    content_text,
+    media_url,
+    media_type,
+    filename,
+  };
+
+  if (keywords) {
+    insertPayload.keywords = keywords;
+  }
+
+  let { data, error } = await supabaseAdmin()
     .from('quick_replies')
-    .insert({
-      account_id: ctx.accountId,
-      user_id: ctx.userId,
-      title,
-      kind,
-      content_text,
-      media_url,
-      media_type,
-      filename,
-      keywords,
-    })
+    .insert(insertPayload)
     .select()
     .single()
+
+  if (error && error.message?.includes('keywords')) {
+    delete insertPayload.keywords;
+    const retry = await supabaseAdmin()
+      .from('quick_replies')
+      .insert(insertPayload)
+      .select()
+      .single()
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

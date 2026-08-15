@@ -46,11 +46,26 @@ export async function PATCH(
     return NextResponse.json({ ok: true })
   }
 
-  const { error } = await supabaseAdmin()
+  let { error } = await supabaseAdmin()
     .from('quick_replies')
     .update(update)
     .eq('id', id)
     .eq('account_id', ctx.accountId)
+
+  if (error && error.message?.includes('keywords')) {
+    delete update.keywords;
+    if (Object.keys(update).length > 0) {
+      const retry = await supabaseAdmin()
+        .from('quick_replies')
+        .update(update)
+        .eq('id', id)
+        .eq('account_id', ctx.accountId)
+      error = retry.error;
+    } else {
+      error = null;
+    }
+  }
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
