@@ -87,7 +87,7 @@ export async function GET() {
 
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, status')
+      .select('phone_number_id, access_token, status, connection_mode, gateway_url, gateway_api_key, instance_name')
       .eq('account_id', accountId)
       .maybeSingle()
 
@@ -105,6 +105,19 @@ export async function GET() {
           connected: false,
           reason: 'no_config',
           message: 'No WhatsApp configuration saved yet. Fill in the form and click Save Configuration.',
+        },
+        { status: 200 }
+      )
+    }
+
+    if (config.connection_mode === 'qr_gateway') {
+      return NextResponse.json(
+        {
+          connected: true,
+          connection_mode: 'qr_gateway',
+          gateway_url: config.gateway_url,
+          instance_name: config.instance_name,
+          phone_info: { verified_name: `WhatsApp Web (${config.instance_name || 'Gateway'})` },
         },
         { status: 200 }
       )

@@ -139,6 +139,14 @@ export function WhatsAppConfig() {
 
       if (data) {
         setConfig(data);
+        if (data.connection_mode === 'qr_gateway') {
+          setConnectionMode('qr_gateway');
+          setGatewayUrl(data.gateway_url || '');
+          setGatewayApiKey(data.gateway_api_key || '');
+          setInstanceName(data.instance_name || 'crm_whatsapp');
+        } else {
+          setConnectionMode('meta_cloud');
+        }
         setPhoneNumberId(data.phone_number_id || '');
         setWabaId(data.waba_id || '');
         setAccessToken(MASKED_TOKEN);
