@@ -145,7 +145,14 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     throw new Error('WhatsApp not configured for this account')
   }
 
-  const accessToken = decrypt(config.access_token)
+  let accessToken = ''
+  if (config.connection_mode !== 'qr_gateway' && config.access_token) {
+    try {
+      accessToken = decrypt(config.access_token)
+    } catch (err) {
+      console.warn('[automations] access_token decryption skipped/failed:', err)
+    }
+  }
 
   // Local template row — read for the body we persist below, not for
   // the Meta payload (the wire shape is deliberately unchanged here).

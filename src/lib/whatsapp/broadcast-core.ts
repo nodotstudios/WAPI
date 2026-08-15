@@ -122,24 +122,36 @@ export async function createBroadcast(
       400
     );
   }
-  const accessToken = decrypt(config.access_token);
+  let accessToken = '';
+  if (config.connection_mode !== 'qr_gateway' && config.access_token) {
+    try {
+      accessToken = decrypt(config.access_token);
+    } catch (err) {
+      console.warn('[broadcast] access_token decryption skipped/failed:', err);
+    }
+  }
 
   // Template row (once) for header/button components; guard a
   // malformed local row rather than N identical opaque failures.
-  const resolvedTemplate = await resolveTemplateRow(
-    db,
-    accountId,
-    templateName,
-    params.templateLanguage
-  );
-  if (resolvedTemplate.malformed) {
-    throw new BroadcastError(
-      'template_malformed',
-      'Template row is malformed locally — run "Sync from Meta" in Settings to repair it before broadcasting.',
-      500
+  let templateRow = null;
+  let templateLanguage = params.templateLanguage || 'en_US';
+  if (config.connection_mode !== 'qr_gateway') {
+    const resolvedTemplate = await resolveTemplateRow(
+      db,
+      accountId,
+      templateName,
+      params.templateLanguage
     );
+    if (resolvedTemplate.malformed) {
+      throw new BroadcastError(
+        'template_malformed',
+        'Template row is malformed locally — run "Sync from Meta" in Settings to repair it before broadcasting.',
+        500
+      );
+    }
+    templateRow = resolvedTemplate.row;
+    templateLanguage = resolvedTemplate.language;
   }
-  const templateRow = resolvedTemplate.row;
 
   // Resolve each recipient to a contact. Invalid phones are dropped
   // (counted as rejected) rather than aborting the whole broadcast.
@@ -205,7 +217,7 @@ export async function createBroadcast(
       p_user_id: auditUserId,
       p_name: name || `API broadcast (${templateName})`,
       p_template_name: templateName,
-      p_template_language: resolvedTemplate.language,
+      p_template_language: templateLanguage,
       p_total_recipients: deduped.length,
       p_contact_ids: deduped.map((r) => r.contactId),
       // Frozen per-recipient params (migration 038) — without them a
@@ -233,7 +245,7 @@ export async function createBroadcast(
   return {
     broadcastId,
     templateName,
-    templateLanguage: resolvedTemplate.language,
+    templateLanguage: templateLanguage,
     phoneNumberId: config.phone_number_id,
     accessToken,
     templateRow,
