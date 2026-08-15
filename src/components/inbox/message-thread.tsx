@@ -242,6 +242,11 @@ export function MessageThread({
 
     if (!lastCustomerMsg) return { expired: true, remaining: "No customer messages" };
 
+    const isQrMode = config?.connection_mode === 'qr_gateway';
+    if (isQrMode) {
+      return { expired: false, remaining: "Unlimited (QR Mode)" };
+    }
+
     const hoursSince = differenceInHours(new Date(), new Date(lastCustomerMsg.created_at));
     const expired = hoursSince >= 24;
 

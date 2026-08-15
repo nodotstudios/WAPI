@@ -267,7 +267,14 @@ export async function sendMessageToConversation(
     );
   }
 
-  const accessToken = decrypt(config.access_token);
+  let accessToken = '';
+  if (config.connection_mode !== 'qr_gateway') {
+    try {
+      accessToken = decrypt(config.access_token);
+    } catch (err) {
+      console.warn('[send-message] access_token decryption skipped/failed:', err);
+    }
+  }
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
   if (isLegacyFormat(config.access_token)) {
