@@ -82,7 +82,10 @@ export async function sendMetaConversionEvent(
     const eventTime = Math.floor(Date.now() / 1000);
     const finalEventId = eventId || `wapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const customData: Record<string, unknown> = {};
+    const customData: Record<string, unknown> = {
+      event_source: "crm",
+      lead_event_source: "WAPI CRM",
+    };
     if (typeof value === "number") {
       customData.value = value;
       customData.currency = currency || "USD";
@@ -95,9 +98,9 @@ export async function sendMetaConversionEvent(
       event_name: eventName === "Custom" && customEventName ? customEventName : eventName,
       event_time: eventTime,
       event_id: finalEventId,
-      action_source: "chat",
+      action_source: "system_generated",
       user_data: userData,
-      custom_data: Object.keys(customData).length > 0 ? customData : undefined,
+      custom_data: customData,
     };
 
     if (eventSourceUrl) {
@@ -112,7 +115,7 @@ export async function sendMetaConversionEvent(
       bodyPayload.test_event_code = testEventCode.trim();
     }
 
-    const res = await fetch(`https://graph.facebook.com/v19.0/${pixelId}/events?access_token=${accessToken}`, {
+    const res = await fetch(`https://graph.facebook.com/v20.0/${pixelId}/events?access_token=${accessToken}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
