@@ -85,30 +85,6 @@ export function PipelineBoard({
     if (!targetStage) return;
 
     onDealMoved(dealId, targetStageId);
-
-    // Auto-push conversion to Meta Ads if moved to Won stage
-    const isWon = /won|converted|closed won|closed-won/i.test(targetStage.name);
-    if (isWon && deal.value) {
-      void fetch("/api/meta/capi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contact_id: deal.contact_id || undefined,
-          deal_id: deal.id,
-          event_name: "Purchase",
-          value: Number(deal.value),
-          currency: deal.currency || defaultCurrency,
-          content_name: deal.title,
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.ok) {
-            toast.success(`Deal Won! Pushed ${formatCurrency(Number(deal.value), deal.currency || defaultCurrency)} conversion to Meta Ads.`);
-          }
-        })
-        .catch(() => {});
-    }
   }
 
   function handleDragCancel() {

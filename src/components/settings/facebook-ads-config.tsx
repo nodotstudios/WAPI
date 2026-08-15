@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { SettingsPanelHead } from "./settings-panel-head";
+import { createClient } from "@/lib/supabase/client";
 import type { FacebookAdsConfig, FacebookConversionEvent } from "@/types";
 
 export function FacebookAdsConfig() {
@@ -38,7 +39,9 @@ export function FacebookAdsConfig() {
   const [accessToken, setAccessToken] = useState("");
   const [testEventCode, setTestEventCode] = useState("");
   const [currency, setCurrency] = useState("USD");
-  const [autoSendOnDealWon, setAutoSendOnDealWon] = useState(true);
+  const [autoSendOnDealWon, setAutoSendOnDealWon] = useState(false);
+  const [autoSendStageId, setAutoSendStageId] = useState<string>("");
+  const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
 
   // Event Logs
   const [events, setEvents] = useState<FacebookConversionEvent[]>([]);
@@ -47,15 +50,25 @@ export function FacebookAdsConfig() {
   const loadConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/meta/config", { cache: "no-store" });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.config) {
+      const supabase = createClient();
+      const [configRes, stagesRes] = await Promise.all([
+        fetch("/api/meta/config", { cache: "no-store" }),
+        supabase.from("pipeline_stages").select("id, name, position").order("position", { ascending: true }),
+      ]);
+
+      const data = await configRes.json().catch(() => ({}));
+      if (stagesRes.data) {
+        setStages(stagesRes.data);
+      }
+
+      if (configRes.ok && data.config) {
         setConfig(data.config);
         setPixelId(data.config.pixel_id || "");
         setAccessToken(data.config.access_token || "");
         setTestEventCode(data.config.test_event_code || "");
         setCurrency(data.config.currency || "USD");
-        setAutoSendOnDealWon(data.config.auto_send_on_deal_won ?? true);
+        setAutoSendOnDealWon(data.config.auto_send_on_deal_won ?? false);
+        setAutoSendStageId(data.config.auto_send_stage_id || "");
       }
     } finally {
       setLoading(false);
@@ -91,7 +104,8 @@ export function FacebookAdsConfig() {
           access_token: accessToken,
           test_event_code: testEventCode,
           currency,
-          auto_send_on_deal_won: autoSendOnDealWon,
+          auto_send_on_deal_won: !!autoSendStageId,
+          auto_send_stage_id: autoSendStageId || null,
         }),
       });
 
@@ -101,7 +115,7 @@ export function FacebookAdsConfig() {
         return;
       }
 
-      toast.success("Facebook Ads & CAPI configuration saved!");
+      toast.success("Facebook Pixel configuration saved!");
       await loadConfig();
     } catch {
       toast.error("Failed to save settings");
@@ -288,7 +302,7 @@ export function FacebookAdsConfig() {
             </div>
           </div>
 
-          {/* Automation & Pipeline Rules */}
+          {/* Automation & Pipeline Stage Mapping */}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
@@ -296,16 +310,44 @@ export function FacebookAdsConfig() {
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-semibold text-foreground">
-                  Automatic Deal &quot;Won&quot; Purchase Trigger
+                  Pipeline Stage Auto-Conversion Mapping
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Automatically send a Meta CAPI <strong>Purchase</strong> event with the deal amount whenever a deal is moved to a &quot;Won&quot; stage in CRM Pipelines.
+                  Map a specific pipeline stage/column to automatically trigger a Purchase conversion to Meta Pixel.
                 </p>
               </div>
-              <Switch
-                checked={autoSendOnDealWon}
-                onCheckedChange={setAutoSendOnDealWon}
-              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Auto-Push When Moved To Stage:
+                </label>
+                <select
+                  value={autoSendStageId}
+                  onChange={(e) => setAutoSendStageId(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                >
+                  <option value="">Disabled / Manual Push Only (Recommended)</option>
+                  {stages.map((stg) => (
+                    <option key={stg.id} value={stg.id}>
+                      {stg.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center text-xs text-muted-foreground rounded-xl border border-border/60 bg-muted/40 p-3.5">
+                {autoSendStageId ? (
+                  <p className="text-emerald-400">
+                    ✅ Moving a deal to <strong>&quot;{stages.find((s) => s.id === autoSendStageId)?.name || "selected stage"}&quot;</strong> will automatically trigger a Purchase event.
+                  </p>
+                ) : (
+                  <p>
+                    🔒 <strong>Zero accidental pushes:</strong> Auto-push is disabled. Conversions will only be sent when an agent clicks <strong>&quot;Push to Facebook Pixel&quot;</strong> on confirmed sales.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 

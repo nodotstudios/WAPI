@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       test_event_code,
       currency,
       auto_send_on_deal_won,
+      auto_send_stage_id,
     } = body;
 
     const payload = {
@@ -41,7 +42,8 @@ export async function POST(request: Request) {
       access_token: typeof access_token === "string" ? access_token.trim() : null,
       test_event_code: typeof test_event_code === "string" ? test_event_code.trim() : null,
       currency: typeof currency === "string" && currency.trim() ? currency.trim().toUpperCase() : "USD",
-      auto_send_on_deal_won: typeof auto_send_on_deal_won === "boolean" ? auto_send_on_deal_won : true,
+      auto_send_on_deal_won: typeof auto_send_on_deal_won === "boolean" ? auto_send_on_deal_won : false,
+      auto_send_stage_id: typeof auto_send_stage_id === "string" && auto_send_stage_id.trim() ? auto_send_stage_id.trim() : null,
       updated_at: new Date().toISOString(),
     };
 
