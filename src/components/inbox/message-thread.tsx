@@ -231,6 +231,23 @@ export function MessageThread({
     };
   }, []);
 
+  const [isQrMode, setIsQrMode] = useState(false);
+
+  useEffect(() => {
+    async function checkMode() {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.from('whatsapp_config').select('connection_mode').maybeSingle();
+        if (data?.connection_mode === 'qr_gateway') {
+          setIsQrMode(true);
+        }
+      } catch (err) {
+        console.error('Failed to check qr mode:', err);
+      }
+    }
+    checkMode();
+  }, []);
+
   // 24-hour session timer
   const sessionInfo = useMemo(() => {
     if (!messages.length) return { expired: false, remaining: "" };
@@ -242,7 +259,6 @@ export function MessageThread({
 
     if (!lastCustomerMsg) return { expired: true, remaining: "No customer messages" };
 
-    const isQrMode = config?.connection_mode === 'qr_gateway';
     if (isQrMode) {
       return { expired: false, remaining: "Unlimited (QR Mode)" };
     }
@@ -261,7 +277,7 @@ export function MessageThread({
         : tTimer("xmRemaining", { minutes: Math.floor(hoursLeft * 60) });
 
     return { expired, remaining };
-  }, [messages, tTimer]);
+  }, [messages, isQrMode, tTimer]);
 
   // Store latest callback in a ref so fetchMessages doesn't need to
   // depend on `onMessagesLoaded` — otherwise parent re-renders cause

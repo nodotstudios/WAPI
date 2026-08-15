@@ -190,8 +190,7 @@ export function MessageComposer({
   const canSend = useCan("send-messages");
   const readOnly = !canSend;
   // Media (like free-form text) is only allowed inside the 24h window.
-  const isQrMode = sessionRemaining?.includes('QR Mode');
-  const inputsDisabled = readOnly || (sessionExpired && !isQrMode);
+  const inputsDisabled = readOnly || sessionExpired;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
