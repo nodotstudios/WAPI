@@ -29,10 +29,22 @@ import {
   PanelRightClose,
   Phone,
   Video,
+  DollarSign,
+  Globe,
+  Loader2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -234,6 +246,53 @@ export function MessageThread({
   }, []);
 
   const [isQrMode, setIsQrMode] = useState(false);
+  const [conversionModalOpen, setConversionModalOpen] = useState(false);
+  const [conversionAmount, setConversionAmount] = useState("");
+  const [conversionEvent, setConversionEvent] = useState<"Purchase" | "Lead">("Purchase");
+  const [conversionCurrency, setConversionCurrency] = useState("USD");
+  const [loggingConversion, setLoggingConversion] = useState(false);
+
+  const handleLogConversion = async () => {
+    if (!conversation?.contact?.id) return;
+    const num = parseFloat(conversionAmount);
+    if (conversionEvent === "Purchase" && (isNaN(num) || num <= 0)) {
+      toast.error("Please enter a valid conversion amount.");
+      return;
+    }
+
+    setLoggingConversion(true);
+    try {
+      const res = await fetch("/api/meta/capi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: conversation.contact.id,
+          event_name: conversionEvent,
+          value: num || undefined,
+          currency: conversionCurrency,
+          content_name: `Sale from Chat (${conversation.contact.name || conversation.contact.phone})`,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(`Meta CAPI Error: ${data.error || "Failed to push conversion"}`);
+        return;
+      }
+
+      toast.success(
+        conversionEvent === "Purchase"
+          ? `Pushed ${conversionCurrency} ${num.toFixed(2)} Purchase conversion to Meta Ads!`
+          : "Pushed Lead conversion event to Meta Ads!"
+      );
+      setConversionModalOpen(false);
+      setConversionAmount("");
+    } catch {
+      toast.error("Failed to push conversion event");
+    } finally {
+      setLoggingConversion(false);
+    }
+  };
 
   useEffect(() => {
     async function checkMode() {
@@ -955,9 +1014,34 @@ export function MessageThread({
             <span className="size-1.5 rounded-full bg-emerald-400" />
             WhatsApp Web
           </Badge>
+
+          {/* Facebook Ad Referral Badge */}
+          {(contact.utm_campaign || contact.ad_title || contact.utm_source) && (
+            <Badge
+              variant="outline"
+              className="ml-1 hidden max-w-44 items-center gap-1 truncate border-blue-500/30 bg-blue-500/10 text-[10px] font-medium text-blue-400 sm:inline-flex"
+              title={`Facebook Ad: ${contact.ad_title || contact.utm_campaign || "Ad Referral"}`}
+            >
+              <Globe className="size-2.5 shrink-0" />
+              <span className="truncate">{contact.ad_title || contact.utm_campaign || "FB Ad Lead"}</span>
+            </Badge>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Log Conversion (Meta CAPI) Button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setConversionModalOpen(true)}
+            className="h-7 gap-1 px-2 text-xs border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
+            title="Push Sale / Conversion to Facebook Ads"
+          >
+            <DollarSign className="size-3.5" />
+            <span className="hidden sm:inline">Log Sale</span>
+          </Button>
+
           {/* Direct Call & Video Call Buttons */}
           <a
             href={`tel:${contact.phone}`}
@@ -1237,6 +1321,117 @@ export function MessageThread({
         onActiveIdChange={handleMediaChange}
         contactLabel={contactDisplayName}
       />
+
+      {/* Log Conversion to Facebook Ads Modal */}
+      <Dialog open={conversionModalOpen} onOpenChange={setConversionModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <DollarSign className="size-5 text-emerald-400" />
+              Log Conversion for Meta Ads
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-xs text-muted-foreground">
+              Send a server-side conversion event (Purchase / Lead) directly to Meta Ads Manager for{" "}
+              <strong className="text-foreground">{contactDisplayName}</strong>.
+            </p>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Conversion Event Type
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={conversionEvent === "Purchase" ? "default" : "outline"}
+                  onClick={() => setConversionEvent("Purchase")}
+                  className={cn(
+                    "text-xs",
+                    conversionEvent === "Purchase" ? "bg-primary text-primary-foreground" : "border-border"
+                  )}
+                >
+                  Purchase (Sale)
+                </Button>
+                <Button
+                  type="button"
+                  variant={conversionEvent === "Lead" ? "default" : "outline"}
+                  onClick={() => setConversionEvent("Lead")}
+                  className={cn(
+                    "text-xs",
+                    conversionEvent === "Lead" ? "bg-primary text-primary-foreground" : "border-border"
+                  )}
+                >
+                  Lead (Qualified)
+                </Button>
+              </div>
+            </div>
+
+            {conversionEvent === "Purchase" && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    Sale Amount
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={conversionAmount}
+                    onChange={(e) => setConversionAmount(e.target.value)}
+                    placeholder="e.g. 250.00"
+                    className="bg-muted text-foreground border-border text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    Currency
+                  </label>
+                  <select
+                    value={conversionCurrency}
+                    onChange={(e) => setConversionCurrency(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-border bg-muted px-2 py-2 text-xs text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="USD">USD ($)</option>
+                    <option value="INR">INR (₹)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="AED">AED</option>
+                    <option value="CAD">CAD</option>
+                    <option value="AUD">AUD</option>
+                    <option value="SGD">SGD</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConversionModalOpen(false)}
+              disabled={loggingConversion}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleLogConversion}
+              disabled={loggingConversion}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {loggingConversion ? (
+                <>
+                  <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  Pushing to Meta...
+                </>
+              ) : (
+                "Push to Facebook Ads"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

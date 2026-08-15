@@ -164,6 +164,35 @@ export async function POST(request: Request) {
       const user_id = config.user_id
       const account_id = config.account_id || config.user_id
 
+      // Extract Facebook Ad Referral & UTM parameters
+      const contextInfo = messageObj.contextInfo || messageObj.extendedTextMessage?.contextInfo || data.contextInfo || {}
+      const externalAd = contextInfo.externalAdReply || {}
+      
+      let utmSource: string | null = externalAd.title ? 'facebook_ad' : null
+      let utmCampaign: string | null = null
+      let utmMedium: string | null = null
+      let utmContent: string | null = null
+      let adId: string | null = externalAd.sourceId || externalAd.sourceUrl || null
+      let adTitle: string | null = externalAd.title || externalAd.body || null
+      let adThumbnailUrl: string | null = externalAd.thumbnailUrl || externalAd.mediaUrl || null
+
+      if (contentText) {
+        const srcMatch = contentText.match(/utm_source=([^\s&]+)/i) || contentText.match(/source=([^\s&]+)/i) || contentText.match(/ref=([^\s&]+)/i)
+        if (srcMatch) utmSource = decodeURIComponent(srcMatch[1])
+
+        const campMatch = contentText.match(/utm_campaign=([^\s&]+)/i) || contentText.match(/campaign=([^\s&]+)/i)
+        if (campMatch) utmCampaign = decodeURIComponent(campMatch[1])
+
+        const medMatch = contentText.match(/utm_medium=([^\s&]+)/i)
+        if (medMatch) utmMedium = decodeURIComponent(medMatch[1])
+
+        const contentMatch = contentText.match(/utm_content=([^\s&]+)/i)
+        if (contentMatch) utmContent = decodeURIComponent(contentMatch[1])
+
+        const adIdMatch = contentText.match(/ad_id=([^\s&]+)/i) || contentText.match(/ad=([^\s&]+)/i)
+        if (adIdMatch) adId = decodeURIComponent(adIdMatch[1])
+      }
+
       // 3. Find or create Contact
       let contact = await findExistingContact(supabaseAdmin(), account_id, phone)
       if (!contact) {
@@ -174,6 +203,13 @@ export async function POST(request: Request) {
             user_id,
             phone,
             name: pushName,
+            utm_source: utmSource,
+            utm_campaign: utmCampaign,
+            utm_medium: utmMedium,
+            utm_content: utmContent,
+            ad_id: adId,
+            ad_title: adTitle,
+            ad_thumbnail_url: adThumbnailUrl,
           })
           .select()
           .single()
@@ -183,6 +219,21 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Contact creation failed: ' + (contactError?.message || '') }, { status: 500 })
         }
         contact = newContact
+      } else if (utmSource || adTitle || adId) {
+        // Update contact attribution if new ad referral is detected
+        void supabaseAdmin()
+          .from('contacts')
+          .update({
+            utm_source: utmSource || contact.utm_source,
+            utm_campaign: utmCampaign || contact.utm_campaign,
+            utm_medium: utmMedium || contact.utm_medium,
+            utm_content: utmContent || contact.utm_content,
+            ad_id: adId || contact.ad_id,
+            ad_title: adTitle || contact.ad_title,
+            ad_thumbnail_url: adThumbnailUrl || contact.ad_thumbnail_url,
+          })
+          .eq('id', contact.id)
+          .catch(() => {})
       }
 
       if (!contact) {

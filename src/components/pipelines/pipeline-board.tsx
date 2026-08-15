@@ -21,6 +21,7 @@ import { Plus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { formatCurrency } from "@/lib/currency";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 interface PipelineBoardProps {
   stages: PipelineStage[];
@@ -80,9 +81,34 @@ export function PipelineBoard({
 
     const deal = deals.find((d) => d.id === dealId);
     if (!deal || deal.stage_id === targetStageId) return;
-    if (!sortedStages.some((s) => s.id === targetStageId)) return;
+    const targetStage = sortedStages.find((s) => s.id === targetStageId);
+    if (!targetStage) return;
 
     onDealMoved(dealId, targetStageId);
+
+    // Auto-push conversion to Meta Ads if moved to Won stage
+    const isWon = /won|converted|closed won|closed-won/i.test(targetStage.name);
+    if (isWon && deal.value) {
+      void fetch("/api/meta/capi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact_id: deal.contact_id || undefined,
+          deal_id: deal.id,
+          event_name: "Purchase",
+          value: Number(deal.value),
+          currency: deal.currency || defaultCurrency,
+          content_name: deal.title,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.ok) {
+            toast.success(`Deal Won! Pushed ${formatCurrency(Number(deal.value), deal.currency || defaultCurrency)} conversion to Meta Ads.`);
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   function handleDragCancel() {

@@ -108,6 +108,15 @@ export interface Contact {
   email?: string;
   company?: string;
   avatar_url?: string;
+  // Facebook / Marketing Attribution (migration 043)
+  utm_source?: string | null;
+  utm_campaign?: string | null;
+  utm_medium?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
+  ad_id?: string | null;
+  ad_title?: string | null;
+  ad_thumbnail_url?: string | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the
@@ -683,4 +692,35 @@ export interface QuickReply {
   interactive_payload?: InteractiveMessagePayload | null;
   created_at: string;
   updated_at: string;
+}
+
+// ============================================================
+// Facebook Ads & Meta Conversions API (CAPI) (migration 043)
+// ============================================================
+
+export interface FacebookAdsConfig {
+  id: string;
+  account_id: string;
+  pixel_id?: string | null;
+  access_token?: string | null;
+  test_event_code?: string | null;
+  currency: string;
+  auto_send_on_deal_won: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FacebookConversionEvent {
+  id: string;
+  account_id: string;
+  contact_id?: string | null;
+  deal_id?: string | null;
+  event_name: string;
+  event_time: string;
+  value?: number | null;
+  currency: string;
+  meta_event_id?: string | null;
+  status: 'sent' | 'failed' | 'test_sent';
+  error_message?: string | null;
+  created_at: string;
 }
