@@ -142,7 +142,7 @@ export async function POST(request: Request) {
 
         if (contactError || !newContact) {
           console.error('Failed to create contact for QR message:', contactError)
-          return NextResponse.json({ error: 'Contact creation failed' }, { status: 500 })
+          return NextResponse.json({ error: 'Contact creation failed: ' + (contactError?.message || '') }, { status: 500 })
         }
         contact = newContact
       }
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
         if (convError || !newConv) {
           console.error('Failed to create conversation for QR message:', convError)
-          return NextResponse.json({ error: 'Conversation creation failed' }, { status: 500 })
+          return NextResponse.json({ error: 'Conversation creation failed: ' + (convError?.message || '') }, { status: 500 })
         }
         conversation = newConv
       } else {
