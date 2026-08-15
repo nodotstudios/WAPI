@@ -1,3 +1,4 @@
+import { fetchEvolutionMediaBase64 } from '@/lib/whatsapp/evolution-api';
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
@@ -103,21 +104,7 @@ export async function POST(request: Request) {
       let contentType = 'text'
       let mediaUrl: string | null = null
 
-      const base64Data = data.base64 || data.mediaBase64 || messageObj.base64 || messageObj.imageMessage?.base64 || messageObj.audioMessage?.base64 || messageObj.videoMessage?.base64 || messageObj.documentMessage?.base64 || null
-
-      if (messageObj.imageMessage) {
-        contentType = 'image'
-        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${messageObj.imageMessage.mimetype || 'image/png'};base64,${base64Data}`) : (messageObj.imageMessage.url || null)
-      } else if (messageObj.audioMessage) {
-        contentType = 'audio'
-        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${messageObj.audioMessage.mimetype || 'audio/ogg;codecs=opus'};base64,${base64Data}`) : (messageObj.audioMessage.url || null)
-      } else if (messageObj.videoMessage) {
-        contentType = 'video'
-        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${messageObj.videoMessage.mimetype || 'video/mp4'};base64,${base64Data}`) : (messageObj.videoMessage.url || null)
-      } else if (messageObj.documentMessage) {
-        contentType = 'document'
-        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${messageObj.documentMessage.mimetype || 'application/pdf'};base64,${base64Data}`) : (messageObj.documentMessage.url || null)
-      }
+      let base64Data = data.base64 || data.mediaBase64 || messageObj.base64 || messageObj.imageMessage?.base64 || messageObj.audioMessage?.base64 || messageObj.videoMessage?.base64 || messageObj.documentMessage?.base64 || null
 
       // Find active whatsapp_config by instance_name or fallback to any configured row
       let { data: config } = await supabaseAdmin()
@@ -135,6 +122,40 @@ export async function POST(request: Request) {
           .maybeSingle()
         config = fallback
       }
+
+      // If base64 is missing, fetch decrypted media base64 directly from Evolution API
+      if (!base64Data && key?.id && config?.gateway_url && config?.gateway_api_key && config?.instance_name) {
+        try {
+          const fetched = await fetchEvolutionMediaBase64({
+            gatewayUrl: config.gateway_url,
+            apiKey: config.gateway_api_key,
+            instanceName: config.instance_name,
+          }, key)
+          if (fetched) base64Data = fetched
+        } catch (e) {
+          console.warn('[qr-webhook] Failed to fetch media base64:', e)
+        }
+      }
+
+      if (messageObj.imageMessage) {
+        contentType = 'image'
+        const mime = messageObj.imageMessage.mimetype || 'image/png'
+        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${mime};base64,${base64Data}`) : (messageObj.imageMessage.url || null)
+      } else if (messageObj.audioMessage) {
+        contentType = 'audio'
+        const mime = messageObj.audioMessage.mimetype || 'audio/ogg;codecs=opus'
+        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${mime};base64,${base64Data}`) : (messageObj.audioMessage.url || null)
+      } else if (messageObj.videoMessage) {
+        contentType = 'video'
+        const mime = messageObj.videoMessage.mimetype || 'video/mp4'
+        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${mime};base64,${base64Data}`) : (messageObj.videoMessage.url || null)
+      } else if (messageObj.documentMessage) {
+        contentType = 'document'
+        const mime = messageObj.documentMessage.mimetype || 'application/pdf'
+        mediaUrl = base64Data ? (base64Data.startsWith('data:') ? base64Data : `data:${mime};base64,${base64Data}`) : (messageObj.documentMessage.url || null)
+      }
+
+
 
       if (!config) {
         return NextResponse.json({ error: 'Instance not configured in database' }, { status: 404 })

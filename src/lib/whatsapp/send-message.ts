@@ -29,7 +29,7 @@ import {
   sendInteractiveList,
   type MediaKind,
 } from '@/lib/whatsapp/meta-api';
-import { sendEvolutionText, sendEvolutionMedia } from '@/lib/whatsapp/evolution-api';
+import { sendEvolutionText, sendEvolutionMedia, sendEvolutionAudio } from '@/lib/whatsapp/evolution-api';
 import {
   validateInteractivePayload,
   interactivePayloadPreviewText,
@@ -424,7 +424,11 @@ export async function sendMessageToConversation(
     };
     let result;
     if (isMediaKind && mediaUrl) {
-      result = await sendEvolutionMedia(evoConfig, sanitizedPhone, mediaUrl, messageType as any, contentText || undefined);
+      if (messageType === 'audio') {
+        result = await sendEvolutionAudio(evoConfig, sanitizedPhone, mediaUrl);
+      } else {
+        result = await sendEvolutionMedia(evoConfig, sanitizedPhone, mediaUrl, messageType as any, contentText || undefined);
+      }
     } else {
       const text = contentText || '';
       result = await sendEvolutionText(evoConfig, sanitizedPhone, text);
