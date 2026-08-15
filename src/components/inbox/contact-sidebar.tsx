@@ -39,6 +39,8 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [isAddingDeal, setIsAddingDeal] = useState(false);
   const [dealTitle, setDealTitle] = useState("");
   const [dealValue, setDealValue] = useState("");
+  const [dealDescription, setDealDescription] = useState("");
+  const [offerings, setOfferings] = useState<any[]>([]);
   const [savingDeal, setSavingDeal] = useState(false);
 
   const fetchContactData = useCallback(async () => {
@@ -46,8 +48,8 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
     const supabase = createClient();
 
-    // Fetch deals, notes, and tags in parallel
-    const [dealsRes, notesRes, tagsRes] = await Promise.all([
+    // Fetch deals, notes, tags, and offerings in parallel
+    const [dealsRes, notesRes, tagsRes, offeringsRes] = await Promise.all([
       supabase
         .from("deals")
         .select("*, stage:pipeline_stages(*)")
@@ -62,10 +64,16 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
         .from("contact_tags")
         .select("id, tag_id, tags(*)")
         .eq("contact_id", contact.id),
+      supabase
+        .from("deal_offerings")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
     ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
+    if (offeringsRes.data) setOfferings(offeringsRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
         .filter((ct: Record<string, unknown>) => ct.tags)
@@ -153,6 +161,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           pipeline_id: pipeline.id,
           stage_id: firstStage.id,
           title: dealTitle.trim(),
+          description: dealDescription.trim() || null,
           value: val,
           currency: defaultCurrency || "USD",
           status: "open",
@@ -164,12 +173,13 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
         setDeals((prev) => [newDeal, ...prev]);
         setDealTitle("");
         setDealValue("");
+        setDealDescription("");
         setIsAddingDeal(false);
       }
     } finally {
       setSavingDeal(false);
     }
-  }, [contact, user, accountId, dealTitle, dealValue, defaultCurrency]);
+  }, [contact, user, accountId, dealTitle, dealValue, dealDescription, defaultCurrency]);
 
   if (!contact) {
     return (
@@ -284,6 +294,29 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
             {isAddingDeal && (
               <div className="mt-2 space-y-2 rounded-lg border border-border bg-muted/30 p-2.5">
+                {offerings.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      const match = offerings.find((o) => o.id === e.target.value);
+                      if (match) {
+                        setDealTitle(match.title);
+                        setDealValue(String(match.value || ""));
+                        if (match.description) setDealDescription(match.description);
+                      }
+                    }}
+                    defaultValue=""
+                    className="w-full rounded border border-primary/40 bg-background px-2 py-1 text-[11px] text-foreground outline-none focus:border-primary"
+                  >
+                    <option value="" disabled>
+                      ✨ Choose from offerings...
+                    </option>
+                    {offerings.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.title} ({o.currency || defaultCurrency} {o.value})
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="text"
                   placeholder="Deal Title"

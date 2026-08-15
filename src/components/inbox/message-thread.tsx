@@ -225,6 +225,8 @@ export function MessageThread({
   const [newDealTitle, setNewDealTitle] = useState("");
   const [newDealValue, setNewDealValue] = useState("");
   const [newDealCurrency, setNewDealCurrency] = useState(defaultCurrency || "USD");
+  const [newDealDescription, setNewDealDescription] = useState("");
+  const [offerings, setOfferings] = useState<any[]>([]);
 
   const [contactDeals, setContactDeals] = useState<any[]>([]);
   const [pipelines, setPipelines] = useState<any[]>([]);
@@ -245,7 +247,7 @@ export function MessageThread({
     setLoadingDeals(true);
     try {
       const supabase = createClient();
-      const [dealsRes, pipelinesRes] = await Promise.all([
+      const [dealsRes, pipelinesRes, offeringsRes] = await Promise.all([
         supabase
           .from("deals")
           .select("id, title, value, currency, stage_id, status, created_at, stage:pipeline_stages(id, name, color, position)")
@@ -255,23 +257,30 @@ export function MessageThread({
           .from("pipelines")
           .select("id, name, stages:pipeline_stages(id, name, color, position)")
           .order("created_at", { ascending: true }),
+        supabase
+          .from("deal_offerings")
+          .select("*")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false }),
       ]);
 
       if (dealsRes.data) {
         setContactDeals(dealsRes.data);
         if (dealsRes.data.length > 0) {
-          const latest = dealsRes.data[0];
-          setSelectedDealId((prev) => prev || latest.id);
-          if (latest.value && !conversionAmount) {
-            setConversionAmount(String(latest.value));
+          setSelectedDealId(dealsRes.data[0].id);
+          if (dealsRes.data[0].value) {
+            setConversionAmount(String(dealsRes.data[0].value));
           }
-          if (latest.currency) {
-            setConversionCurrency(latest.currency);
+          if (dealsRes.data[0].currency) {
+            setConversionCurrency(dealsRes.data[0].currency);
           }
         }
       }
       if (pipelinesRes.data) {
         setPipelines(pipelinesRes.data);
+      }
+      if (offeringsRes.data) {
+        setOfferings(offeringsRes.data);
       }
     } finally {
       setLoadingDeals(false);
@@ -320,6 +329,7 @@ export function MessageThread({
           pipeline_id: targetPipeline.id,
           stage_id: firstStage.id,
           title,
+          description: newDealDescription.trim() || null,
           value: val,
           currency: newDealCurrency || defaultCurrency,
           status: "open",
@@ -1569,6 +1579,38 @@ export function MessageThread({
             <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
               Creating a deal for <strong className="text-foreground">{contactDisplayName}</strong> ({contact.phone}). It will be automatically added to the <strong>&quot;{pipelines[0]?.stages?.[0]?.name || "New Lead"}&quot;</strong> stage on your Kanban board.
             </div>
+
+            {offerings.length > 0 && (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground flex items-center justify-between">
+                  <span>✨ Quick Offering / Template (Optional)</span>
+                  <span className="text-[10px] opacity-75">Click to auto-fill & edit</span>
+                </label>
+                <select
+                  onChange={(e) => {
+                    const match = offerings.find((o) => o.id === e.target.value);
+                    if (match) {
+                      setNewDealTitle(match.title);
+                      setNewDealValue(String(match.value || ""));
+                      if (match.currency) setNewDealCurrency(match.currency);
+                      if (match.description) setNewDealDescription(match.description);
+                    }
+                  }}
+                  defaultValue=""
+                  className="flex h-10 w-full rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                >
+                  <option value="" disabled>
+                    -- Choose from predefined offerings or type custom below --
+                  </option>
+                  {offerings.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.title} — {o.currency || defaultCurrency} {Number(o.value || 0).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div>
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Deal Title
@@ -1614,6 +1656,19 @@ export function MessageThread({
                   <option value="SGD">SGD</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Deal Description & Deliverables
+              </label>
+              <textarea
+                value={newDealDescription}
+                onChange={(e) => setNewDealDescription(e.target.value)}
+                placeholder="Details of the offer, packages, scope, notes..."
+                rows={2}
+                className="w-full rounded-md border border-border bg-muted p-2 text-xs text-foreground outline-none focus:border-primary"
+              />
             </div>
           </div>
           <DialogFooter className="mt-2">

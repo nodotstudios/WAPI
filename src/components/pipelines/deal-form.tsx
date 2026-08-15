@@ -60,6 +60,7 @@ export function DealForm({
   const [title, setTitle] = useState("");
   const [value, setValue] = useState("");
   const [currency, setCurrency] = useState(defaultCurrency);
+  const [description, setDescription] = useState("");
   const [contactId, setContactId] = useState("");
   const [stageId, setStageId] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
@@ -68,6 +69,7 @@ export function DealForm({
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [offerings, setOfferings] = useState<any[]>([]);
   const [linkedConversation, setLinkedConversation] =
     useState<Conversation | null>(null);
 
@@ -143,6 +145,7 @@ export function DealForm({
       setTitle(deal.title);
       setValue(String(deal.value ?? ""));
       setCurrency(deal.currency || defaultCurrency);
+      setDescription(deal.description || "");
       // contact_id is nullable when the contact has been deleted
       // (migration 004: ON DELETE SET NULL). "" means "no selection".
       setContactId(deal.contact_id ?? "");
@@ -154,6 +157,7 @@ export function DealForm({
       setTitle("");
       setValue("");
       setCurrency(defaultCurrency);
+      setDescription("");
       setContactId("");
       setStageId(defaultStageId || stages[0]?.id || "");
       setAssignedTo("");
@@ -168,13 +172,15 @@ export function DealForm({
     if (!open) return;
     let cancelled = false;
     (async () => {
-      const [c, p] = await Promise.all([
+      const [c, p, off] = await Promise.all([
         supabase.from("contacts").select("*").order("name"),
         supabase.from("profiles").select("*").order("full_name"),
+        supabase.from("deal_offerings").select("*").eq("is_active", true).order("created_at", { ascending: false }),
       ]);
       if (cancelled) return;
       setContacts((c.data ?? []) as Contact[]);
       setProfiles((p.data ?? []) as Profile[]);
+      setOfferings((off.data ?? []) as any[]);
     })();
     return () => {
       cancelled = true;
@@ -218,6 +224,7 @@ export function DealForm({
       title: title.trim(),
       value: parseFloat(value) || 0,
       currency,
+      description: description.trim() || null,
       contact_id: contactId,
       pipeline_id: pipelineId,
       stage_id: stageId,
@@ -315,6 +322,37 @@ export function DealForm({
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {!deal && offerings.length > 0 && (
+              <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 space-y-1.5">
+                <Label className="text-xs font-semibold text-primary flex items-center justify-between">
+                  <span>✨ Use Offering / Template (Optional)</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Pre-fills & fully editable</span>
+                </Label>
+                <select
+                  onChange={(e) => {
+                    const match = offerings.find((o) => o.id === e.target.value);
+                    if (match) {
+                      setTitle(match.title);
+                      setValue(String(match.value || ""));
+                      if (match.currency) setCurrency(match.currency);
+                      if (match.description) setDescription(match.description);
+                    }
+                  }}
+                  defaultValue=""
+                  className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:border-primary"
+                >
+                  <option value="" disabled>
+                    -- Select an offering template or create custom below --
+                  </option>
+                  {offerings.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.title} — {o.currency || defaultCurrency} {Number(o.value || 0).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="grid gap-2">
               <Label className="text-muted-foreground">{t("title")}</Label>
               <Input
@@ -388,6 +426,16 @@ export function DealForm({
                 value={expectedCloseDate}
                 onChange={(e) => setExpectedCloseDate(e.target.value)}
                 className="border-border bg-muted text-foreground"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-muted-foreground">Deal Description & Scope</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What does this deal / package include?"
+                className="min-h-[70px] border-border bg-muted text-foreground"
               />
             </div>
 

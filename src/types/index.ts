@@ -391,6 +391,7 @@ export interface Deal {
   title: string;
   value: number;
   currency?: string;
+  description?: string | null;
   notes?: string;
   expected_close_date?: string;
   status?: DealStatus;
@@ -407,6 +408,20 @@ export interface Deal {
   contact?: Contact;
   stage?: PipelineStage;
   assignee?: Profile;
+}
+
+export interface DealOffering {
+  id: string;
+  account_id?: string;
+  user_id?: string | null;
+  title: string;
+  description?: string | null;
+  value: number;
+  currency?: string;
+  category?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DealStageHistory {

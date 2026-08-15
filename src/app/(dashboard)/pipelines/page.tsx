@@ -39,14 +39,16 @@ import {
   XCircle,
   Archive,
   Clock,
+  Package,
 } from "lucide-react";
+import { OfferingsManager } from "@/components/crm/offerings-manager";
 import { toast } from "sonner";
 import { useCan } from "@/hooks/use-can";
 import { useAuth } from "@/hooks/use-auth";
 import { GatedButton } from "@/components/ui/gated-button";
 import { useTranslations } from "next-intl";
 
-type CrmViewTab = "active" | "dashboard" | "won" | "lost" | "archive" | "activities";
+type CrmViewTab = "active" | "dashboard" | "won" | "lost" | "archive" | "activities" | "offerings";
 
 const SPEC_DEFAULT_STAGES = [
   { name: "New Lead", color: "#3b82f6", position: 0 },
@@ -465,6 +467,19 @@ export default function PipelinesPage() {
               <Clock className="size-3.5" />
               Activities
             </button>
+
+            <button
+              type="button"
+              onClick={() => setCurrentView("offerings")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                currentView === "offerings"
+                  ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Package className="size-3.5" />
+              Offerings
+            </button>
           </div>
         </div>
 
@@ -495,6 +510,8 @@ export default function PipelinesPage() {
 
       {/* Main View Switcher */}
       {currentView === "dashboard" && <CrmDashboard />}
+
+      {currentView === "offerings" && <OfferingsManager />}
 
       {currentView === "archive" && (
         <CrmArchiveGrid

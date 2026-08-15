@@ -316,6 +316,18 @@ export function DealDetailWorkspace({
               {/* Main Content: Timeline & Details */}
               <ScrollArea className="flex-1 p-6">
                 <div className="space-y-6">
+                  {/* Deal Scope & Description */}
+                  {deal.description && (
+                    <div className="rounded-xl border border-border/80 bg-muted/40 p-4 space-y-1.5 shadow-sm">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Deal Description & Scope
+                      </h4>
+                      <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                        {deal.description}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Quick Add Note Box */}
                   <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
                     <textarea
