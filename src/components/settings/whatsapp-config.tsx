@@ -1,132 +1,50 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
-  Eye,
-  EyeOff,
-  Copy,
   CheckCircle2,
   XCircle,
   Loader2,
-  ExternalLink,
-  Zap,
-  AlertTriangle,
-  RotateCcw,
+  Copy,
+  RefreshCw,
+  QrCode,
+  Smartphone,
+  ShieldCheck,
+  Server,
+  Power,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
-import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Switch } from '@/components/ui/switch';
 import { SettingsPanelHead } from './settings-panel-head';
-import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from '@/components/ui/accordion';
-import type { WhatsAppConfig as WhatsAppConfigType } from '@/types';
-
-const MASKED_TOKEN = '••••••••••••••••';
-
-type ConnectionStatus = 'connected' | 'disconnected' | 'unknown';
-type ResetReason = 'token_corrupted' | 'meta_api_error' | null;
 
 export function WhatsAppConfig() {
-  const t = useTranslations('Settings.whatsapp');
   const supabase = createClient();
-  // After multi-user, whatsapp_config is one-row-per-account, not
-  // one-row-per-user. We pull `accountId` straight off the auth
-  // context and key every read off it — so a teammate who just
-  // joined an account sees the inviter's saved config without
-  // having to re-enter anything.
-  const {
-    user,
-    accountId,
-    loading: authLoading,
-    profileLoading,
-    canEditSettings,
-  } = useAuth();
+  const { user, accountId } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [showToken, setShowToken] = useState(false);
-  const [config, setConfig] = useState<WhatsAppConfigType | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
-  const [resetReason, setResetReason] = useState<ResetReason>(null);
-  const [statusMessage, setStatusMessage] = useState<string>('');
-  // Guards against re-hydrating the form when the load effect below
-  // re-runs for reasons unrelated to actually switching accounts —
-  // e.g. Supabase's onAuthStateChange fires a token refresh (new
-  // `user` object, profileLoading flips true/false) when the browser
-  // tab regains focus. Without this, that churn calls fetchConfig()
-  // again and overwrites whatever the user typed but hadn't saved yet.
-  const loadedAccountIdRef = useRef<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'unknown'>('unknown');
 
-  const [connectionMode, setConnectionMode] = useState<'meta_cloud' | 'qr_gateway'>('meta_cloud');
   const [gatewayUrl, setGatewayUrl] = useState('');
   const [gatewayApiKey, setGatewayApiKey] = useState('');
   const [instanceName, setInstanceName] = useState('crm_whatsapp');
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
-  const [qrLoading, setQrLoading] = useState(false);
 
-  const [phoneNumberId, setPhoneNumberId] = useState('');
-  const [wabaId, setWabaId] = useState('');
-  const [accessToken, setAccessToken] = useState('');
-  const [verifyToken, setVerifyToken] = useState('');
-  const [pin, setPin] = useState('');
-  const [tokenEdited, setTokenEdited] = useState(false);
-
-  // Inbound-media mirror (issue #466). Unlike everything else on this
-  // page it is NOT part of handleSave: that path insists on re-entering
-  // the access token so it can re-verify with Meta, which is a silly
-  // toll to pay for flipping a boolean. The switch writes straight to
-  // the row instead — RLS (migration 017) restricts whatsapp_config
-  // UPDATE to admins, hence the canEditSettings gate below; without it
-  // a viewer's toggle would match zero rows and appear to work.
-  const [mirrorMedia, setMirrorMedia] = useState(true);
-  const [savingMirror, setSavingMirror] = useState(false);
-
-  // True once /register has succeeded on Meta's side (timestamp set
-  // in the row). When false, the saved config is metadata-only and
-  // Meta will silently drop every inbound event — that's the
-  // multi-number bug that prompted this work.
-  const isRegistered = Boolean(config?.registered_at);
-  const lastRegistrationError = config?.last_registration_error ?? null;
-
-  const [verifyingRegistration, setVerifyingRegistration] = useState(false);
-  type RegistrationProbe = {
-    live: boolean;
-    checks: Record<string, boolean | null>;
-    errors?: string[];
-    last_registration_error?: string | null;
-    registered_at?: string | null;
-    subscribed_apps_at?: string | null;
-  };
-  const [registrationProbe, setRegistrationProbe] =
-    useState<RegistrationProbe | null>(null);
-
-  const webhookUrl =
+  const qrWebhookUrl =
     typeof window !== 'undefined'
-      ? `${window.location.origin}/api/whatsapp/webhook`
+      ? `${window.location.origin}/api/whatsapp/qr-webhook`
       : '';
 
   const fetchConfig = useCallback(async (acctId: string) => {
     setLoading(true);
     try {
-      // Load form values from Supabase (shows what's in DB).
-      // Switched from `user_id` (which would only match the row's
-      // original author) to `account_id` so every member of the
-      // account sees the same saved configuration. UNIQUE(account_id)
-      // on the table guarantees the .maybeSingle() return type
-      // remains accurate.
       const { data, error } = await supabase
         .from('whatsapp_config')
         .select('*')
@@ -134,344 +52,125 @@ export function WhatsAppConfig() {
         .maybeSingle();
 
       if (error) {
-        console.error('Failed to load config row:', error);
+        console.error('Failed to load config:', error);
       }
 
       if (data) {
-        setConfig(data);
-        if (data.connection_mode === 'qr_gateway') {
-          setConnectionMode('qr_gateway');
-          setGatewayUrl(data.gateway_url || '');
-          setGatewayApiKey(data.gateway_api_key || '');
-          setInstanceName(data.instance_name || 'crm_whatsapp');
-        } else {
-          setConnectionMode('meta_cloud');
-        }
-        setPhoneNumberId(data.phone_number_id || '');
-        setWabaId(data.waba_id || '');
-        setAccessToken(MASKED_TOKEN);
-        setVerifyToken('');
-        setPin('');
-        setTokenEdited(false);
-        // Undefined on a row read before migration 039 — treat that as
-        // on, matching the webhook's own default.
-        setMirrorMedia(data.mirror_inbound_media !== false);
+        setGatewayUrl(data.gateway_url || '');
+        setGatewayApiKey(data.gateway_api_key || '');
+        setInstanceName(data.instance_name || 'crm_whatsapp');
+        setConnectionStatus(data.status === 'connected' ? 'connected' : 'disconnected');
       } else {
-        setConfig(null);
-        setPhoneNumberId('');
-        setWabaId('');
-        setAccessToken('');
-        setVerifyToken('');
-        setPin('');
-        setTokenEdited(false);
-        setMirrorMedia(true);
-      }
-      // Clear any stale probe result when reloading the row.
-      setRegistrationProbe(null);
-
-      // Then verify health via the API (decrypts token + pings Meta)
-      if (data) {
-        try {
-          const res = await fetch('/api/whatsapp/config', { method: 'GET' });
-          const payload = await res.json();
-
-          if (payload.connected) {
-            setConnectionStatus('connected');
-            setResetReason(null);
-            setStatusMessage('');
-          } else {
-            setConnectionStatus('disconnected');
-            setResetReason(payload.needs_reset ? 'token_corrupted' : payload.reason === 'meta_api_error' ? 'meta_api_error' : null);
-            setStatusMessage(payload.message || '');
-          }
-        } catch (err) {
-          console.error('Health check failed:', err);
-          setConnectionStatus('disconnected');
-        }
-      } else {
+        setGatewayUrl('');
+        setGatewayApiKey('');
+        setInstanceName('crm_whatsapp');
         setConnectionStatus('disconnected');
-        setResetReason(null);
-        setStatusMessage('');
       }
     } catch (err) {
-      console.error('fetchConfig error:', err);
-      toast.error('Failed to load WhatsApp configuration');
+      console.error('Error fetching config:', err);
     } finally {
       setLoading(false);
     }
   }, [supabase]);
 
   useEffect(() => {
-    // Need both the auth session (`!authLoading`) AND the profile
-    // (`!profileLoading`, which carries `accountId`). Without the
-    // second guard, the effect would fire with `accountId === null`
-    // for the first render window and bail without ever retrying
-    // once the profile arrives.
-    if (authLoading || profileLoading) return;
-    if (!user || !accountId) {
-      loadedAccountIdRef.current = null;
+    if (accountId) {
+      void fetchConfig(accountId);
+    } else {
       setLoading(false);
+    }
+  }, [accountId, fetchConfig]);
+
+  const handleFetchQr = async () => {
+    if (!gatewayUrl.trim() || !instanceName.trim()) {
+      toast.error('Please enter Gateway URL and Instance Name');
       return;
     }
-    if (loadedAccountIdRef.current === accountId) return;
-    loadedAccountIdRef.current = accountId;
-    fetchConfig(accountId);
-  }, [authLoading, profileLoading, user?.id, accountId, fetchConfig]);
-
-  async function handleToggleMirrorMedia(next: boolean) {
-    if (!config || !accountId || savingMirror) return;
-    // Optimistic — the switch should feel instant; a failure rolls it
-    // back rather than leaving the UI ahead of the row.
-    const previous = mirrorMedia;
-    setMirrorMedia(next);
-    setSavingMirror(true);
+    setQrLoading(true);
     try {
-      const { error } = await supabase
-        .from('whatsapp_config')
-        .update({ mirror_inbound_media: next })
-        .eq('account_id', accountId);
-      if (error) throw new Error(error.message);
-      setConfig({ ...config, mirror_inbound_media: next });
-    } catch (error) {
-      console.error('Failed to update media retention setting:', error);
-      setMirrorMedia(previous);
-      toast.error(t('mirrorInboundSaveFailed'));
+      const res = await fetch(
+        `/api/whatsapp/qr-webhook?gateway_url=${encodeURIComponent(
+          gatewayUrl.trim()
+        )}&api_key=${encodeURIComponent(gatewayApiKey.trim())}&instance_name=${encodeURIComponent(
+          instanceName.trim()
+        )}`
+      );
+      const data = await res.json();
+      if (data.qr_code) {
+        setQrCodeBase64(data.qr_code);
+        toast.success('QR Code generated! Scan it with your phone.');
+      } else if (data.connected) {
+        toast.success('WhatsApp is already connected!');
+        setConnectionStatus('connected');
+        setQrCodeBase64(null);
+      } else {
+        toast.error(data.error || 'Failed to fetch QR Code from Gateway');
+      }
+    } catch {
+      toast.error('Failed to reach Gateway server');
     } finally {
-      setSavingMirror(false);
+      setQrLoading(false);
     }
-  }
+  };
 
-  async function handleSave() {
-    if (connectionMode === 'qr_gateway') {
-      if (!gatewayUrl.trim() || !instanceName.trim()) {
-        toast.error('Gateway URL and Instance Name are required');
-        return;
-      }
-      try {
-        setSaving(true);
-        const { error } = await supabase
-          .from('whatsapp_config')
-          .upsert({
-            account_id: accountId,
-            user_id: user?.id,
-            connection_mode: 'qr_gateway',
-            gateway_url: gatewayUrl.trim(),
-            gateway_api_key: gatewayApiKey.trim() || null,
-            instance_name: instanceName.trim(),
-            phone_number_id: `qr_${instanceName.trim()}`,
-            access_token: 'qr_gateway_active',
-            status: 'connected',
-            updated_at: new Date().toISOString(),
-          });
-
-        if (error) {
-          toast.error('Failed to save QR Gateway settings');
-        } else {
-          toast.success('QR Gateway settings saved successfully!');
-          setConnectionStatus('connected');
-        }
-      } catch (err) {
-        toast.error('Error saving settings');
-      } finally {
-        setSaving(false);
-      }
+  const handleSaveSettings = async () => {
+    if (!gatewayUrl.trim() || !instanceName.trim()) {
+      toast.error('Gateway URL and Instance Name are required');
       return;
     }
-
-    if (!phoneNumberId.trim()) {
-      toast.error('Phone Number ID is required');
-      return;
-    }
-    if (!config && (!accessToken.trim() || !tokenEdited)) {
-      toast.error('Access Token is required for initial setup');
-      return;
-    }
-
     try {
       setSaving(true);
-
-      // Always POST through the API — it verifies with Meta and encrypts
-      // the access_token server-side with ENCRYPTION_KEY. Skipping this
-      // and writing direct to Supabase stores the token in plaintext,
-      // which then fails decryption on every subsequent health check.
-      const payload: Record<string, unknown> = {
-        phone_number_id: phoneNumberId.trim(),
-        waba_id: wabaId.trim() || null,
-        verify_token: verifyToken.trim() || null,
-        // Optional — only sent when the user filled it in. The server
-        // requires it on first save or when changing numbers; for a
-        // simple token rotation, leaving it blank skips re-register.
-        pin: pin.trim() || null,
-      };
-
-      if (tokenEdited && accessToken !== MASKED_TOKEN && accessToken.trim()) {
-        payload.access_token = accessToken.trim();
-      } else if (config) {
-        // Existing config — reuse stored encrypted token by decrypting on the
-        // server. But our POST handler requires an access_token to verify
-        // with Meta. If the user didn't change the token, we need to signal
-        // that. Simplest: require token re-entry if they're updating.
-        toast.error('Please re-enter the Access Token to save changes');
-        setSaving(false);
-        return;
-      }
-
-      const res = await fetch('/api/whatsapp/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const { error } = await supabase.from('whatsapp_config').upsert({
+        account_id: accountId,
+        user_id: user?.id,
+        connection_mode: 'qr_gateway',
+        gateway_url: gatewayUrl.trim(),
+        gateway_api_key: gatewayApiKey.trim() || null,
+        instance_name: instanceName.trim(),
+        phone_number_id: `qr_${instanceName.trim()}`,
+        access_token: 'qr_gateway_active',
+        status: connectionStatus === 'connected' ? 'connected' : 'disconnected',
+        updated_at: new Date().toISOString(),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error || 'Failed to save configuration');
-        setSaving(false);
-        return;
-      }
-
-      // The route now returns a structured outcome:
-      //   * registered=true   → number is live, events will flow
-      //   * registered=false  → credentials saved but /register
-      //                         failed; UI shows the specific error
-      //                         and a retry path. registration_error
-      //                         is human-readable from Meta.
-      if (data.registered === false && data.registration_error) {
-        toast.error(
-          `Saved, but Meta couldn't register the number: ${data.registration_error}`,
-          { duration: 12000 },
-        );
-      } else if (data.registration_skipped) {
-        // Credentials saved + verified, but /register was skipped
-        // because no PIN was supplied (e.g. a Meta test number).
-        // Don't claim the number is "Live" — point at the
-        // Registration status banner instead.
-        toast.success(
-          'Credentials saved and verified. Inbound registration was skipped (no PIN) — see Registration status below.',
-          { duration: 10000 },
-        );
-        setPin('');
+      if (error) {
+        toast.error('Failed to save settings');
       } else {
-        toast.success(
-          data.phone_info?.verified_name
-            ? `Live — ${data.phone_info.verified_name} can now receive events.`
-            : 'WhatsApp connected. Events will start flowing within a minute.',
-        );
-        // Clear the PIN so subsequent saves don't accidentally
-        // re-register (which would void the active subscription if
-        // the PIN became stale).
-        setPin('');
+        toast.success('Gateway settings saved successfully!');
       }
-
-      if (accountId) await fetchConfig(accountId);
-    } catch (err) {
-      console.error('Save error:', err);
-      toast.error('Failed to save configuration');
+    } catch {
+      toast.error('Error saving settings');
     } finally {
       setSaving(false);
     }
-  }
+  };
 
-  async function handleTestConnection() {
+  const handleDisconnect = async () => {
     try {
-      setTesting(true);
-      const res = await fetch('/api/whatsapp/config', { method: 'GET' });
-      const payload = await res.json();
+      await supabase
+        .from('whatsapp_config')
+        .update({ status: 'disconnected', updated_at: new Date().toISOString() })
+        .eq('account_id', accountId);
 
-      if (payload.connected) {
-        setConnectionStatus('connected');
-        setResetReason(null);
-        setStatusMessage('');
-        toast.success(
-          payload.phone_info?.verified_name
-            ? `Connected to ${payload.phone_info.verified_name}`
-            : 'API connection successful'
-        );
-      } else {
-        setConnectionStatus('disconnected');
-        setResetReason(payload.needs_reset ? 'token_corrupted' : payload.reason === 'meta_api_error' ? 'meta_api_error' : null);
-        setStatusMessage(payload.message || '');
-        toast.error(payload.message || 'API connection failed');
-      }
-    } catch (err) {
-      console.error('Test connection error:', err);
       setConnectionStatus('disconnected');
-      toast.error('Connection test failed. Check network and try again.');
-    } finally {
-      setTesting(false);
+      setQrCodeBase64(null);
+      toast.success('Disconnected WhatsApp session');
+    } catch {
+      toast.error('Failed to disconnect');
     }
-  }
+  };
 
-  async function handleVerifyRegistration() {
-    setVerifyingRegistration(true);
-    setRegistrationProbe(null);
-    try {
-      const res = await fetch('/api/whatsapp/config/verify-registration', {
-        method: 'GET',
-      });
-      const data = (await res.json()) as RegistrationProbe;
-      setRegistrationProbe(data);
-      if (data.live) {
-        toast.success('Number is fully wired — Meta is delivering events.');
-      } else {
-        toast.error(
-          'Number is not fully registered. See the checks below for which step failed.',
-          { duration: 8000 },
-        );
-      }
-      if (accountId) await fetchConfig(accountId);
-    } catch (err) {
-      console.error('verify-registration failed:', err);
-      toast.error('Could not reach the verification endpoint.');
-    } finally {
-      setVerifyingRegistration(false);
-    }
-  }
-
-  async function handleReset() {
-    if (!confirm('This will delete the current WhatsApp config so you can re-enter it. Continue?')) {
-      return;
-    }
-
-    try {
-      setResetting(true);
-      const res = await fetch('/api/whatsapp/config', { method: 'DELETE' });
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error || 'Failed to reset configuration');
-        return;
-      }
-
-      toast.success('Configuration cleared. You can now re-enter your credentials.');
-      setConfig(null);
-      setPhoneNumberId('');
-      setWabaId('');
-      setAccessToken('');
-      setVerifyToken('');
-      setTokenEdited(false);
-      setConnectionStatus('disconnected');
-      setResetReason(null);
-      setStatusMessage('');
-    } catch (err) {
-      console.error('Reset error:', err);
-      toast.error('Failed to reset configuration');
-    } finally {
-      setResetting(false);
-    }
-  }
-
-  function handleCopyWebhookUrl() {
-    navigator.clipboard.writeText(webhookUrl);
+  const handleCopyWebhook = () => {
+    navigator.clipboard.writeText(qrWebhookUrl);
     toast.success('Webhook URL copied to clipboard');
-  }
+  };
 
   if (loading) {
     return (
       <section className="animate-in fade-in-50 duration-200">
         <SettingsPanelHead
-          title={t("title")}
-          description={t("description")}
+          title="WhatsApp Web CRM"
+          description="Connect your WhatsApp account by scanning a QR code"
         />
         <div className="flex items-center justify-center py-12">
           <Loader2 className="size-6 animate-spin text-primary" />
@@ -480,638 +179,212 @@ export function WhatsAppConfig() {
     );
   }
 
-  const showResetBanner = resetReason === 'token_corrupted';
-
   return (
-    <section className="animate-in fade-in-50 duration-200">
+    <section className="animate-in fade-in-50 duration-200 space-y-6">
       <SettingsPanelHead
-        title={t("title")}
-        description={t("description")}
+        title="WhatsApp Web Connection"
+        description="Scan the QR code with WhatsApp on your phone to link your shared CRM inbox."
       />
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-      {/* Main config form */}
-      <div className="space-y-6">
-        {/* Corrupted-token reset banner */}
-        {showResetBanner && (
-          <Alert className="bg-amber-950/40 border-amber-600/40">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="size-5 text-amber-400 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <AlertTitle className="text-amber-200 mb-1">
-                  Stored token can&apos;t be decrypted
-                </AlertTitle>
-                <AlertDescription className="text-amber-100/80 text-sm">
-                  {statusMessage}
-                </AlertDescription>
-                <Button
-                  onClick={handleReset}
-                  disabled={resetting}
-                  size="sm"
-                  className="mt-3 bg-amber-600 hover:bg-amber-700 text-white"
-                >
-                  {resetting ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      {t('resetting')}
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="size-4" />
-                      {t('resetConfig')}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </Alert>
-        )}
 
-        {/* Connection Status */}
-        <Alert className="bg-card border-border">
-          <div className="flex items-center gap-2">
+      {/* Connection Status Banner */}
+      <Alert className={connectionStatus === 'connected' ? 'bg-emerald-950/30 border-emerald-700/50' : 'bg-card border-border'}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
             {connectionStatus === 'connected' ? (
-              <CheckCircle2 className="size-4 text-primary" />
+              <CheckCircle2 className="size-5 text-emerald-400 shrink-0" />
             ) : (
-              <XCircle className="size-4 text-red-500" />
+              <XCircle className="size-5 text-amber-500 shrink-0" />
             )}
-            <AlertTitle className="text-foreground mb-0">
-              {connectionStatus === 'connected' ? t('credentialsValid') : t('notConnected')}
-            </AlertTitle>
+            <div>
+              <AlertTitle className="text-foreground font-semibold">
+                {connectionStatus === 'connected' ? 'WhatsApp Connected & Active' : 'WhatsApp Disconnected'}
+              </AlertTitle>
+              <AlertDescription className="text-muted-foreground text-xs">
+                {connectionStatus === 'connected'
+                  ? `Instance "${instanceName}" is linked. Inbound and outbound messages are active.`
+                  : 'Generate a QR code below and scan it on your phone to connect.'}
+              </AlertDescription>
+            </div>
           </div>
-          <AlertDescription className="text-muted-foreground">
-            {connectionStatus === 'connected'
-              ? t('connectedDesc')
-              : statusMessage ||
-                t('notConnectedDesc')}
-          </AlertDescription>
-        </Alert>
 
-        {/* Registration Status — the "is it actually live?" check.
-            Credentials being valid is necessary but not sufficient;
-            without a successful /register call the number won't
-            receive inbound events. Surface this dimension separately
-            so users don't trust a misleading green banner. */}
-        {config && (
-          <Alert
-            className={
-              isRegistered
-                ? 'bg-emerald-950/30 border-emerald-700/50'
-                : 'bg-amber-950/30 border-amber-700/50'
-            }
-          >
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                {isRegistered ? (
-                  <CheckCircle2 className="size-4 text-emerald-400" />
-                ) : (
-                  <AlertTriangle className="size-4 text-amber-400" />
-                )}
-                <AlertTitle
-                  className={
-                    'mb-0 ' + (isRegistered ? 'text-emerald-200' : 'text-amber-200')
-                  }
-                >
-                  {isRegistered
-                    ? t('registered')
-                    : t('notRegistered')}
-                </AlertTitle>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleVerifyRegistration}
-                disabled={verifyingRegistration}
-                className="border-border bg-transparent text-foreground hover:bg-muted h-7"
-              >
-                {verifyingRegistration ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Zap className="size-3.5" />
-                )}
-                {t('verifyWithMeta')}
-              </Button>
-            </div>
-            <AlertDescription className="text-muted-foreground mt-2 text-xs leading-relaxed">
-              {isRegistered ? (
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: t('subscribedSince', {
-                      date: config.registered_at
-                        ? new Date(config.registered_at).toLocaleString()
-                        : t('unknownDate'),
-                    }),
-                  }}
-                />
-              ) : lastRegistrationError ? (
-                <>
-                  {t('lastAttemptFailed')}
-                  <span className="text-red-300">
-                    &quot;{lastRegistrationError}&quot;
-                  </span>
-                  . {t('retryHint')}
-                </>
-              ) : (
-                <>{t('noRegistrationHint')}</>
-              )}
-            </AlertDescription>
-
-            {registrationProbe && (
-              <div className="mt-3 rounded border border-border bg-card/60 px-3 py-2 space-y-1.5 text-[11px]">
-                <p className="font-medium text-foreground">
-                  {t('diagnosticLastRun')}
-                  <span className={registrationProbe.live ? 'text-emerald-400' : 'text-amber-400'}>
-                    {registrationProbe.live ? t('live') : t('notLive')}
-                  </span>
-                </p>
-                <ul className="space-y-0.5 text-muted-foreground">
-                  {Object.entries(registrationProbe.checks).map(([k, v]) => (
-                    <li key={k} className="flex items-center gap-1.5">
-                      {v === true ? (
-                        <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
-                      ) : v === false ? (
-                        <XCircle className="size-3 text-red-400 shrink-0" />
-                      ) : (
-                        <span className="size-3 rounded-full border border-border shrink-0" />
-                      )}
-                      <code className="text-muted-foreground">{k}</code>
-                    </li>
-                  ))}
-                </ul>
-                {(registrationProbe.errors ?? []).length > 0 && (
-                  <ul className="pt-1 space-y-0.5 text-red-300">
-                    {registrationProbe.errors?.map((e, i) => (
-                      <li key={i}>• {e}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </Alert>
-        )}
-
-        {/* Connection Mode Selector Card */}
-        <Card className="border-border bg-card">
-          <CardHeader>
-            <CardTitle className="text-foreground">Connection Method</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Choose how you want to connect your WhatsApp account to the CRM
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => setConnectionMode('meta_cloud')}
-                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center ${
-                  connectionMode === 'meta_cloud'
-                    ? 'border-primary bg-primary/10 font-medium text-foreground'
-                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                <Zap className="size-6 mb-2 text-primary" />
-                <span className="text-sm font-semibold flex items-center gap-2">Meta Official Cloud API <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground font-normal">(Meta Only)</span></span>
-                <span className="text-xs text-muted-foreground mt-1">Requires Access Token & Phone Number ID</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setConnectionMode('qr_gateway')}
-                className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all text-center ${
-                  connectionMode === 'qr_gateway'
-                    ? 'border-primary bg-primary/10 font-medium text-foreground'
-                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                <Eye className="size-6 mb-2 text-emerald-400" />
-                <span className="text-sm font-semibold">Scan QR Code (WhatsApp Web)</span>
-                <span className="text-xs text-muted-foreground mt-1">Scan QR code directly from your phone app</span>
-              </button>
-            </div>
-
-            {/* QR Gateway Section */}
-            {connectionMode === 'qr_gateway' && (
-              <div className="mt-6 pt-6 border-t border-border space-y-4">
-                <Alert className="bg-emerald-950/20 border-emerald-700/40">
-                  <AlertTitle className="text-emerald-300 font-medium flex items-center gap-2">
-                    <CheckCircle2 className="size-4 text-emerald-400" />
-                    WhatsApp Web QR Gateway Active
-                  </AlertTitle>
-                  <AlertDescription className="text-emerald-200/80 text-xs mt-1">
-                    Connect any active WhatsApp number on your phone by scanning the QR code below. No Meta Developer Account required.
-                  </AlertDescription>
-                </Alert>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-muted-foreground text-xs">Gateway Server URL</Label>
-                    <Input
-                      placeholder="e.g. http://localhost:8080 or https://evo-api.com"
-                      value={gatewayUrl}
-                      onChange={(e) => setGatewayUrl(e.target.value)}
-                      className="bg-muted border-border text-foreground text-sm"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-muted-foreground text-xs">Instance Name</Label>
-                    <Input
-                      placeholder="e.g. crm_whatsapp"
-                      value={instanceName}
-                      onChange={(e) => setInstanceName(e.target.value)}
-                      className="bg-muted border-border text-foreground text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground text-xs">Gateway API Key</Label>
-                  <Input
-                    type="password"
-                    placeholder="Enter API Key"
-                    value={gatewayApiKey}
-                    onChange={(e) => setGatewayApiKey(e.target.value)}
-                    className="bg-muted border-border text-foreground text-sm"
-                  />
-                </div>
-
-                <div className="flex items-center gap-3 pt-2">
-                  <Button
-                    type="button"
-                    onClick={async () => {
-                      if (!gatewayUrl || !instanceName) {
-                        toast.error('Please enter Gateway URL and Instance Name');
-                        return;
-                      }
-                      setQrLoading(true);
-                      try {
-                        const res = await fetch(`/api/whatsapp/qr-webhook?gateway_url=${encodeURIComponent(gatewayUrl)}&api_key=${encodeURIComponent(gatewayApiKey)}&instance_name=${encodeURIComponent(instanceName)}`);
-                        const data = await res.json();
-                        if (data.qr_code) {
-                          setQrCodeBase64(data.qr_code);
-                          toast.success('QR Code generated! Scan it with your phone.');
-                        } else if (data.connected) {
-                          toast.success('WhatsApp is already connected!');
-                          setConnectionStatus('connected');
-                        } else {
-                          toast.error(data.error || 'Failed to fetch QR Code');
-                        }
-                      } catch {
-                        toast.error('Failed to reach Gateway server');
-                      } finally {
-                        setQrLoading(false);
-                      }
-                    }}
-                    disabled={qrLoading}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    {qrLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : <Eye className="size-4 mr-2" />}
-                    Generate / Refresh QR Code
-                  </Button>
-                </div>
-
-                {/* Render Base64 QR Code */}
-                {qrCodeBase64 && (
-                  <div className="mt-4 p-4 rounded-xl border border-border bg-card flex flex-col items-center justify-center text-center space-y-3">
-                    <p className="text-sm font-semibold text-foreground">Scan with WhatsApp on your phone:</p>
-                    <div className="p-3 bg-white rounded-lg shadow-md">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`}
-                        alt="WhatsApp Pair QR Code"
-                        className="w-56 h-56 object-contain"
-                      />
-                    </div>
-                    <ol className="text-xs text-muted-foreground text-left space-y-1 list-decimal list-inside bg-muted/30 p-3 rounded-lg w-full max-w-sm">
-                      <li>Open **WhatsApp** on your phone</li>
-                      <li>Tap **Settings / Menu (⋮)** → **Linked Devices**</li>
-                      <li>Tap **Link a Device** and scan this QR code</li>
-                    </ol>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* API Credentials */}
-        {connectionMode === 'meta_cloud' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">{t('apiCredentialsTitle')}</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              {t('apiCredentialsDesc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('phoneNumberId')}</Label>
-              <Input
-                placeholder="e.g. 100234567890123"
-                value={phoneNumberId}
-                onChange={(e) => setPhoneNumberId(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('wabaId')}</Label>
-              <Input
-                placeholder="e.g. 100234567890456"
-                value={wabaId}
-                onChange={(e) => setWabaId(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('accessToken')}</Label>
-              <div className="relative">
-                <Input
-                  type={showToken ? 'text' : 'password'}
-                  placeholder={t('accessTokenPlaceholder')}
-                  value={accessToken}
-                  onChange={(e) => {
-                    setAccessToken(e.target.value);
-                    setTokenEdited(true);
-                  }}
-                  onFocus={() => {
-                    if (accessToken === MASKED_TOKEN) {
-                      setAccessToken('');
-                      setTokenEdited(true);
-                    }
-                  }}
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showToken ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
-              {config && !tokenEdited && (
-                <p className="text-xs text-muted-foreground">
-                  {t('tokenHidden')}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('webhookVerifyToken')}</Label>
-              <Input
-                placeholder={t('webhookVerifyTokenPlaceholder')}
-                value={verifyToken}
-                onChange={(e) => setVerifyToken(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('webhookVerifyTokenHint')}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">
-                {t('twoStepPin')}
-                <span className="ml-1 text-muted-foreground">{t('optional')}</span>
-              </Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder={t('pinPlaceholder')}
-                value={pin}
-                onChange={(e) =>
-                  setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
-                }
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground tracking-widest"
-              />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                <span dangerouslySetInnerHTML={{ __html: t('pinHint') }} />
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        )}
-
-        {/* Webhook URL */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">{t('webhookTitle')}</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              {t('webhookDesc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('webhookUrl')}</Label>
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={webhookUrl}
-                  className="bg-muted border-border text-muted-foreground font-mono text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleCopyWebhookUrl}
-                  className="shrink-0 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                >
-                  <Copy className="size-4" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Attachment retention. Only meaningful once a number is
-            connected, since it governs what the webhook does with
-            inbound media. */}
-        {config && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground">{t('mediaTitle')}</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                {t('mediaDesc')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {t('mirrorInbound')}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t('mirrorInboundDesc')}
-                  </p>
-                  {!mirrorMedia && (
-                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
-                      {t('mirrorInboundOffWarning')}
-                    </p>
-                  )}
-                </div>
-                <Switch
-                  checked={mirrorMedia}
-                  onCheckedChange={handleToggleMirrorMedia}
-                  disabled={savingMirror || !canEditSettings}
-                  aria-label={t('mirrorInbound')}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3">
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                {t('saving')}
-              </>
-            ) : (
-              t('saveConfig')
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleTestConnection}
-            disabled={testing || !config}
-            className="border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-          >
-            {testing ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                {t('testing')}
-              </>
-            ) : (
-              <>
-                <Zap className="size-4" />
-                {t('testConnection')}
-              </>
-            )}
-          </Button>
-          {config && (
+          {connectionStatus === 'connected' && (
             <Button
               variant="outline"
-              onClick={handleReset}
-              disabled={resetting}
-              className="border-red-900 text-red-400 hover:text-red-300 hover:bg-red-950/40"
+              size="sm"
+              onClick={handleDisconnect}
+              className="border-red-500/30 text-red-400 hover:bg-red-950/40 hover:text-red-300"
             >
-              {resetting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  {t('resetting')}
-                </>
-              ) : (
-                <>
-                  <RotateCcw className="size-4" />
-                  {t('resetConfig')}
-                </>
-              )}
+              <Power className="size-3.5 mr-1.5" />
+              Disconnect Session
             </Button>
           )}
         </div>
-      </div>
+      </Alert>
 
-      {/* Setup Instructions Sidebar */}
-      <div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground text-base">{t('setupInstructions')}</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              {t('setupInstructionsDesc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Accordion>
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
-                    {t('step1')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li dangerouslySetInnerHTML={{ __html: t('step1_1') }} />
-                    <li>{t('step1_2')}</li>
-                    <li>{t('step1_3')}</li>
-                    <li>{t('step1_4')}</li>
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
+      {/* QR Code Scanner Card */}
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <QrCode className="size-5 text-primary" />
+            Scan QR Code to Connect
+          </CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Link any phone number currently running on WhatsApp or WhatsApp Business
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex flex-col items-center justify-center p-6 border border-border/80 rounded-2xl bg-muted/20">
+            {qrCodeBase64 ? (
+              <div className="flex flex-col items-center space-y-4">
+                <div className="p-4 bg-white rounded-2xl shadow-xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`}
+                    alt="WhatsApp QR Code"
+                    className="w-64 h-64 object-contain"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFetchQr}
+                  disabled={qrLoading}
+                  className="text-xs"
+                >
+                  <RefreshCw className={`size-3.5 mr-1.5 ${qrLoading ? 'animate-spin' : ''}`} />
+                  Refresh QR Code
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-6 text-center space-y-3">
+                <div className="p-4 rounded-2xl bg-primary/10 text-primary">
+                  <Smartphone className="size-10" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {connectionStatus === 'connected' ? 'Session is Live' : 'Ready to Generate QR Code'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    {connectionStatus === 'connected'
+                      ? 'Your phone is linked. You can refresh the QR code anytime if you want to pair a new device.'
+                      : 'Click the button below to fetch a live QR code and link your phone.'}
+                  </p>
+                </div>
+                <Button
+                  onClick={handleFetchQr}
+                  disabled={qrLoading}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2"
+                >
+                  {qrLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin mr-2" />
+                      Generating QR Code...
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="size-4 mr-2" />
+                      Generate QR Code
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
 
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">2</span>
-                    {t('step2')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>{t('step2_1')}</li>
-                    <li>{t('step2_2')}</li>
-                    <li>{t('step2_3')}</li>
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">3</span>
-                    {t('step3')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>{t('step3_1')}</li>
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step3_2') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step3_3') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step3_4') }} />
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">4</span>
-                    {t('step4')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>{t('step4_1')}</li>
-                    <li>{t('step4_2')}</li>
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step4_3') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step4_4') }} />
-                    <li>{t('step4_5')}</li>
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-
-            <div className="mt-4 pt-4 border-t border-border">
-              <a
-                href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
-              >
-                <ExternalLink className="size-3.5" />
-                {t('metaDocs')}
-              </a>
+            {/* Step by step guide */}
+            <div className="mt-6 w-full max-w-md bg-card/80 border border-border rounded-xl p-4">
+              <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                <ShieldCheck className="size-4 text-emerald-400" />
+                How to connect:
+              </p>
+              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                <li>Open <strong>WhatsApp</strong> on your phone</li>
+                <li>Tap <strong>Settings (iOS)</strong> or <strong>Menu ⋮ (Android)</strong></li>
+                <li>Tap <strong>Linked Devices</strong> → <strong>Link a Device</strong></li>
+                <li>Point your phone camera at this QR code screen</li>
+              </ol>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Gateway Server Configuration */}
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <Server className="size-4 text-primary" />
+            Gateway Server Settings
+          </CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Configure your Evolution API / Baileys Gateway connection endpoint
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Gateway URL</Label>
+              <Input
+                placeholder="e.g. http://localhost:8080 or https://evo-api.yourdomain.com"
+                value={gatewayUrl}
+                onChange={(e) => setGatewayUrl(e.target.value)}
+                className="bg-muted border-border text-foreground text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Instance Name</Label>
+              <Input
+                placeholder="crm_whatsapp"
+                value={instanceName}
+                onChange={(e) => setInstanceName(e.target.value)}
+                className="bg-muted border-border text-foreground text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Gateway API Key</Label>
+            <Input
+              type="password"
+              placeholder="Enter your Gateway API Key (AUTHENTICATION_GLOBAL_KEY)"
+              value={gatewayApiKey}
+              onChange={(e) => setGatewayApiKey(e.target.value)}
+              className="bg-muted border-border text-foreground text-sm"
+            />
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <Label className="text-xs text-muted-foreground">Inbound Webhook URL (Paste into Evolution API Webhook config)</Label>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={qrWebhookUrl}
+                className="bg-muted/60 border-border text-muted-foreground text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopyWebhook}
+                className="shrink-0 text-xs"
+              >
+                <Copy className="size-3.5 mr-1.5" />
+                Copy
+              </Button>
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <Button
+              onClick={handleSaveSettings}
+              disabled={saving}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Save Gateway Settings
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </section>
   );
 }

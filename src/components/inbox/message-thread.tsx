@@ -946,17 +946,12 @@ export function MessageThread({
             <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
             <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
           </div>
-          {/* Session timer badge — hidden on the narrowest phones so
-              the name + back arrow keep their room. */}
           <Badge
             variant="outline"
-            className={cn(
-              "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2",
-              sessionInfo.expired ? "text-red-400" : "text-primary"
-            )}
+            className="ml-1 hidden gap-1 border-border text-[10px] text-emerald-400 sm:inline-flex sm:ml-2"
           >
-            <Clock className="h-3 w-3" />
-            {sessionInfo.remaining}
+            <span className="size-1.5 rounded-full bg-emerald-400" />
+            WhatsApp Web
           </Badge>
         </div>
 
