@@ -124,9 +124,6 @@ const STEP_META: Record<AutomationStepType, StepMeta> = {
 
 const ADDABLE_STEPS: AutomationStepType[] = [
   "send_message",
-  "send_buttons",
-  "send_list",
-  "send_template",
   "add_tag",
   "remove_tag",
   "assign_conversation",
@@ -142,7 +139,6 @@ const TRIGGER_OPTIONS: { value: AutomationTriggerType }[] = [
   { value: "new_message_received" },
   { value: "first_inbound_message" },
   { value: "keyword_match" },
-  { value: "interactive_reply" },
   { value: "new_contact_created" },
   { value: "conversation_assigned" },
   { value: "tag_added" },
