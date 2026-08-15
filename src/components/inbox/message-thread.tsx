@@ -492,14 +492,14 @@ export function MessageThread({
 
       const tempId = `temp-${Date.now()}`;
 
-      // Optimistic update — shows the message immediately with "sending" status
+      // Optimistic update — shows the message immediately with "sent" status
       const optimisticMsg: Message = {
         id: tempId,
         conversation_id: conversation.id,
         sender_type: "agent",
         content_type: "text",
         content_text: text,
-        status: "sending",
+        status: "sent",
         created_at: new Date().toISOString(),
         reply_to_message_id: replyToId,
       };
@@ -530,9 +530,7 @@ export function MessageThread({
         }
 
         // Success — the realtime INSERT event will replace the temp bubble
-        // with the real DB row. If realtime hasn't arrived yet, at least
-        // flip status to 'sent' so the UI stops showing "sending".
-        onUpdateMessage(tempId, { status: "sent" });
+        // with the real DB row.
       } catch (err) {
         console.error("Failed to send message:", err);
         const reason = err instanceof Error ? err.message : "network error";
@@ -563,7 +561,7 @@ export function MessageThread({
         content_type: payload.kind,
         content_text: contentText,
         media_url: payload.mediaUrl,
-        status: "sending",
+        status: "sent",
         created_at: new Date().toISOString(),
         reply_to_message_id: payload.replyToId,
       };

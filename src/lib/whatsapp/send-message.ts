@@ -222,16 +222,33 @@ export async function sendMessageToConversation(
 
   const isMediaKind = (MEDIA_KINDS as readonly string[]).includes(messageType);
 
-  // Conversation + contact, account-scoped.
-  const { data: conversation, error: convError } = await db
-    .from('conversations')
-    .select('*, contact:contacts(*)')
-    .eq('id', conversationId)
-    .eq('account_id', accountId)
-    .single();
+  // Fetch conversation + contact and WhatsApp config concurrently.
+  const [convRes, configRes] = await Promise.all([
+    db
+      .from('conversations')
+      .select('*, contact:contacts(*)')
+      .eq('id', conversationId)
+      .eq('account_id', accountId)
+      .single(),
+    db
+      .from('whatsapp_config')
+      .select('*')
+      .eq('account_id', accountId)
+      .single(),
+  ]);
 
-  if (convError || !conversation) {
+  const conversation = convRes.data;
+  if (convRes.error || !conversation) {
     throw new SendMessageError('not_found', 'Conversation not found', 404);
+  }
+
+  const config = configRes.data;
+  if (configRes.error || !config) {
+    throw new SendMessageError(
+      'whatsapp_not_configured',
+      'WhatsApp not configured. Please set up your WhatsApp integration first.',
+      400
+    );
   }
 
   const contact = conversation.contact;
@@ -248,21 +265,6 @@ export async function sendMessageToConversation(
     throw new SendMessageError(
       'bad_request',
       'Invalid phone number format',
-      400
-    );
-  }
-
-  // WhatsApp config, account-scoped.
-  const { data: config, error: configError } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
-
-  if (configError || !config) {
-    throw new SendMessageError(
-      'whatsapp_not_configured',
-      'WhatsApp not configured. Please set up your WhatsApp integration first.',
       400
     );
   }
@@ -532,19 +534,17 @@ export async function sendMessageToConversation(
       ? interactivePayloadPreviewText(interactivePayload!)
       : persistedText || `[${messageType}]`;
 
-  await db
-    .from('conversations')
-    .update({
-      last_message_text: lastMessageText,
-      last_message_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', conversationId);
-
-  // Pause any active Flow run for this contact — the agent stepping in
-  // is the strongest "yield, human is here" signal. Best-effort.
-  try {
-    const { error: pauseErr } = await supabaseAdmin()
+  // Fire conversation summary and flow pause asynchronously without blocking HTTP response
+  void Promise.allSettled([
+    db
+      .from('conversations')
+      .update({
+        last_message_text: lastMessageText,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId),
+    supabaseAdmin()
       .from('flow_runs')
       .update({
         status: 'paused_by_agent',
@@ -553,16 +553,8 @@ export async function sendMessageToConversation(
       })
       .eq('account_id', accountId)
       .eq('contact_id', contact.id)
-      .eq('status', 'active');
-    if (pauseErr) {
-      console.error('[flows] pause-on-agent-send failed:', pauseErr.message);
-    }
-  } catch (err) {
-    console.error(
-      '[flows] pause-on-agent-send threw:',
-      err instanceof Error ? err.message : err
-    );
-  }
+      .eq('status', 'active'),
+  ]).catch(() => {});
 
   return { messageId: messageRecord.id, whatsappMessageId: waMessageId };
 }
