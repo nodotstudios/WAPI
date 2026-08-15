@@ -32,6 +32,7 @@ import {
   DollarSign,
   Globe,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
@@ -291,6 +292,31 @@ export function MessageThread({
       toast.error("Failed to push conversion event");
     } finally {
       setLoggingConversion(false);
+    }
+  };
+
+  const [clearChatModalOpen, setClearChatModalOpen] = useState(false);
+  const [clearingChat, setClearingChat] = useState(false);
+
+  const handleClearChatFromCrm = async () => {
+    if (!conversation?.id) return;
+    setClearingChat(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/purge-messages`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to clear chat history");
+        return;
+      }
+      toast.success("Chat history cleared from CRM. Contacts and sales logs are preserved.");
+      setClearChatModalOpen(false);
+      if (onRefresh) onRefresh();
+    } catch {
+      toast.error("Failed to clear chat history");
+    } finally {
+      setClearingChat(false);
     }
   };
 
@@ -1199,6 +1225,16 @@ export function MessageThread({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Clear Chat History from CRM button */}
+          <button
+            type="button"
+            onClick={() => setClearChatModalOpen(true)}
+            title="Clear Chat History from CRM (Free Storage)"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-red-400"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
 
@@ -1427,6 +1463,52 @@ export function MessageThread({
                 </>
               ) : (
                 "Push to Facebook Ads"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear Chat Confirmation Modal */}
+      <Dialog open={clearChatModalOpen} onOpenChange={setClearChatModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <Trash2 className="size-5 text-red-400" />
+              Clear Chat History from CRM?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-xs text-muted-foreground">
+            <p>
+              This will delete all message bubbles and media attachments for{" "}
+              <strong className="text-foreground">{contactDisplayName}</strong> from your Supabase database to free storage.
+            </p>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-300">
+              ✅ <strong>What is kept:</strong> The customer&apos;s contact card, phone number, deals, notes, and Facebook conversion records are permanently saved. The chat also remains intact on your WhatsApp phone.
+            </div>
+          </div>
+          <DialogFooter className="mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setClearChatModalOpen(false)}
+              disabled={clearingChat}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleClearChatFromCrm}
+              disabled={clearingChat}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {clearingChat ? (
+                <>
+                  <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  Clearing Chat...
+                </>
+              ) : (
+                "Clear Messages from CRM"
               )}
             </Button>
           </DialogFooter>

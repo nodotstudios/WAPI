@@ -1,5 +1,6 @@
 import {
   Coins,
+  Database,
   FileText,
   Globe,
   KeyRound,
@@ -29,6 +30,7 @@ export const SETTINGS_SECTIONS = [
   'appearance',
   'whatsapp',
   'facebook-ads',
+  'data-retention',
   'quick-replies',
   'fields',
   'deals',
@@ -55,6 +57,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
   whatsapp: { id: 'whatsapp', label: 'WhatsApp Web', icon: PlugZap, group: 'workspace' },
   'facebook-ads': { id: 'facebook-ads', label: 'Facebook Pixel', icon: Globe, group: 'workspace' },
+  'data-retention': { id: 'data-retention', label: 'Data Retention', icon: Database, group: 'workspace' },
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },

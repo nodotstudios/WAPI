@@ -76,6 +76,27 @@ export function DealForm({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pushingToMeta, setPushingToMeta] = useState(false);
+  const [clearingChat, setClearingChat] = useState(false);
+
+  const handleClearChat = async () => {
+    if (!linkedConversation?.id) return;
+    setClearingChat(true);
+    try {
+      const res = await fetch(`/api/conversations/${linkedConversation.id}/purge-messages`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to clear chat history");
+        return;
+      }
+      toast.success("Customer chat history cleared from CRM to free storage.");
+    } catch {
+      toast.error("Failed to clear chat history");
+    } finally {
+      setClearingChat(false);
+    }
+  };
 
   const handlePushToMeta = async () => {
     if (!deal) return;
@@ -482,6 +503,29 @@ export function DealForm({
                   <>
                     <DollarSign className="mr-1.5 size-4" />
                     Push Paid Conversion to Facebook Pixel ({currency} {value || "0"})
+                  </>
+                )}
+              </Button>
+            )}
+
+            {deal && linkedConversation && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleClearChat}
+                disabled={clearingChat}
+                className="w-full mb-3 border-border text-xs text-muted-foreground hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30"
+              >
+                {clearingChat ? (
+                  <>
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                    Clearing Chat...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-1.5 size-3.5" />
+                    Clear Chat Messages from CRM (Keep Deal)
                   </>
                 )}
               </Button>
