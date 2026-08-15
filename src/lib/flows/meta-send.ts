@@ -1,8 +1,12 @@
 import {
+  sendTextMessage,
+  sendTemplateMessage,
+  sendMediaMessage,
+} from '@/lib/whatsapp/meta-api'
+import { sendEvolutionText, sendEvolutionMedia } from '@/lib/whatsapp/evolution-api'
+import {
   sendInteractiveButtons,
   sendInteractiveList,
-  sendMediaMessage,
-  sendTextMessage,
   type InteractiveButton,
   type InteractiveListSection,
   type MediaKind,
@@ -216,23 +220,37 @@ export async function engineSendMedia(
     return r.messageId
   }
 
-  const variants = phoneVariants(sanitized)
   let workingPhone = sanitized
   let waMessageId = ''
-  let lastError: unknown = null
-  for (const v of variants) {
-    try {
-      waMessageId = await attempt(v)
-      workingPhone = v
-      lastError = null
-      break
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!isRecipientNotAllowedError(msg)) throw err
-      lastError = err
+
+  if (config.connection_mode === 'qr_gateway' && config.gateway_url && config.gateway_api_key && config.instance_name) {
+    const evoConfig = {
+      gatewayUrl: config.gateway_url,
+      apiKey: config.gateway_api_key,
+      instanceName: config.instance_name,
     }
+    const res = await sendEvolutionMedia(evoConfig, sanitized, args.link, args.kind, args.caption)
+    if (!res.success) {
+      throw new Error(res.error || 'QR Gateway media send failed')
+    }
+    waMessageId = res.messageId || `evo_${Date.now()}`
+  } else {
+    const variants = phoneVariants(sanitized)
+    let lastError: unknown = null
+    for (const v of variants) {
+      try {
+        waMessageId = await attempt(v)
+        workingPhone = v
+        lastError = null
+        break
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!isRecipientNotAllowedError(msg)) throw err
+        lastError = err
+      }
+    }
+    if (lastError) throw lastError
   }
-  if (lastError) throw lastError
 
   if (workingPhone !== sanitized) {
     await db.from('contacts').update({ phone: workingPhone }).eq('id', contact.id)
@@ -384,23 +402,38 @@ async function sendInteractiveViaMeta(
   // Same phone-variant retry as automations/meta-send.ts. Numbers
   // registered with/without a trunk 0 + Meta's sandbox quirks all
   // need this to reliably land a message.
-  const variants = phoneVariants(sanitized)
   let workingPhone = sanitized
   let waMessageId = ''
-  let lastError: unknown = null
-  for (const v of variants) {
-    try {
-      waMessageId = await attempt(v)
-      workingPhone = v
-      lastError = null
-      break
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!isRecipientNotAllowedError(msg)) throw err
-      lastError = err
+
+  if (config.connection_mode === 'qr_gateway' && config.gateway_url && config.gateway_api_key && config.instance_name) {
+    const evoConfig = {
+      gatewayUrl: config.gateway_url,
+      apiKey: config.gateway_api_key,
+      instanceName: config.instance_name,
     }
+    const formattedText = input.bodyText + (input.kind === 'buttons' ? '\n\n' + input.buttons.map(b => `• ${b.title}`).join('\n') : '')
+    const res = await sendEvolutionText(evoConfig, sanitized, formattedText)
+    if (!res.success) {
+      throw new Error(res.error || 'QR Gateway interactive send failed')
+    }
+    waMessageId = res.messageId || `evo_${Date.now()}`
+  } else {
+    const variants = phoneVariants(sanitized)
+    let lastError: unknown = null
+    for (const v of variants) {
+      try {
+        waMessageId = await attempt(v)
+        workingPhone = v
+        lastError = null
+        break
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!isRecipientNotAllowedError(msg)) throw err
+        lastError = err
+      }
+    }
+    if (lastError) throw lastError
   }
-  if (lastError) throw lastError
 
   if (workingPhone !== sanitized) {
     await db.from('contacts').update({ phone: workingPhone }).eq('id', contact.id)

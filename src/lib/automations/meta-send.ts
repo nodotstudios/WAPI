@@ -1,4 +1,5 @@
 import { sendTextMessage, sendTemplateMessage } from '@/lib/whatsapp/meta-api'
+import { sendEvolutionText } from '@/lib/whatsapp/evolution-api'
 import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive'
 import {
   engineSendInteractiveButtons,
@@ -183,26 +184,38 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     return r.messageId
   }
 
-  // Same phone-variant retry as /api/whatsapp/send — Meta sandbox and
-  // numbers registered with/without a trunk 0 both require this to
-  // reliably land a message.
-  const variants = phoneVariants(sanitized)
   let workingPhone = sanitized
   let waMessageId = ''
-  let lastError: unknown = null
-  for (const v of variants) {
-    try {
-      waMessageId = await attempt(v)
-      workingPhone = v
-      lastError = null
-      break
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (!isRecipientNotAllowedError(msg)) throw err
-      lastError = err
+
+  if (config.connection_mode === 'qr_gateway' && config.gateway_url && config.gateway_api_key && config.instance_name) {
+    const evoConfig = {
+      gatewayUrl: config.gateway_url,
+      apiKey: config.gateway_api_key,
+      instanceName: config.instance_name,
     }
+    const textToSend = (input.kind === 'text' ? input.text : (templateRow ? templateContentText(templateRow, input.params || []) : input.templateName)) || ''
+    const res = await sendEvolutionText(evoConfig, sanitized, textToSend)
+    if (!res.success) {
+      throw new Error(res.error || 'QR Gateway send failed')
+    }
+    waMessageId = res.messageId || `evo_${Date.now()}`
+  } else {
+    const variants = phoneVariants(sanitized)
+    let lastError: unknown = null
+    for (const v of variants) {
+      try {
+        waMessageId = await attempt(v)
+        workingPhone = v
+        lastError = null
+        break
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!isRecipientNotAllowedError(msg)) throw err
+        lastError = err
+      }
+    }
+    if (lastError) throw lastError
   }
-  if (lastError) throw lastError
 
   if (workingPhone !== sanitized) {
     await db.from('contacts').update({ phone: workingPhone }).eq('id', contact.id)
