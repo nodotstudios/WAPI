@@ -188,7 +188,7 @@ export function DealDetailWorkspace({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl bg-card border-border p-0 flex flex-col h-full shadow-2xl">
+        <SheetContent className="w-full sm:w-[50vw] sm:max-w-[50vw] md:max-w-[50vw] lg:max-w-[50vw] data-[side=right]:sm:max-w-[50vw] data-[side=right]:w-[50vw] bg-card border-border p-0 flex flex-col h-full shadow-2xl">
           {loading || !deal ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="size-8 animate-spin text-primary" />
@@ -261,7 +261,7 @@ export function DealDetailWorkspace({
                     <Flame className="size-3 text-primary" />
                     Deal Stage Progression
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-muted/60 p-1.5 rounded-xl border border-border">
+                  <div className="flex flex-wrap sm:flex-nowrap gap-1.5 bg-muted/60 p-1.5 rounded-xl border border-border overflow-x-auto">
                     {sortedStages.map((stg, idx) => {
                       const isCurrent = deal.stage_id === stg.id;
                       const isPassed = currentStageIndex > idx;
@@ -271,7 +271,7 @@ export function DealDetailWorkspace({
                           key={stg.id}
                           type="button"
                           onClick={() => handleStageChange(stg.id)}
-                          className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all text-center ${
+                          className={`flex flex-1 items-center justify-center gap-1.5 min-w-[90px] px-3 py-2 text-xs font-semibold rounded-lg transition-all text-center ${
                             isCurrent
                               ? "bg-primary text-primary-foreground shadow-md ring-2 ring-primary/40 font-bold scale-[1.02]"
                               : isPassed
@@ -280,7 +280,7 @@ export function DealDetailWorkspace({
                           }`}
                         >
                           {isPassed && <Check className="size-3 text-emerald-400 shrink-0" />}
-                          <span className="truncate">{stg.name}</span>
+                          <span className="whitespace-nowrap truncate">{stg.name}</span>
                         </button>
                       );
                     })}
