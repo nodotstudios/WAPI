@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Pipeline, PipelineStage, Deal } from "@/types";
 import { PipelineBoard } from "@/components/pipelines/pipeline-board";
@@ -60,13 +61,43 @@ const SPEC_DEFAULT_STAGES = [
 ];
 
 export default function PipelinesPage() {
+  return (
+    <Suspense fallback={null}>
+      <PipelinesPageInner />
+    </Suspense>
+  );
+}
+
+function PipelinesPageInner() {
   const t = useTranslations("Pipelines.page");
   const supabase = createClient();
+  const searchParams = useSearchParams();
   const canEditSettings = useCan("edit-settings");
   const canCreateDeals = useCan("send-messages");
   const { accountId, user } = useAuth();
 
-  const [currentView, setCurrentView] = useState<CrmViewTab>("dashboard");
+  const viewParam = searchParams.get("view") as CrmViewTab | null;
+  const [currentView, setCurrentView] = useState<CrmViewTab>(
+    viewParam && ["dashboard", "active", "schedule", "won", "lost", "archive", "offerings"].includes(viewParam)
+      ? viewParam
+      : "dashboard"
+  );
+
+  useEffect(() => {
+    if (viewParam && ["dashboard", "active", "schedule", "won", "lost", "archive", "offerings"].includes(viewParam)) {
+      setCurrentView(viewParam);
+    }
+  }, [viewParam]);
+
+  const switchView = (view: CrmViewTab) => {
+    setCurrentView(view);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("view", view);
+      window.history.pushState({}, "", url.toString());
+    }
+  };
+
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -393,7 +424,7 @@ export default function PipelinesPage() {
           <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border">
             <button
               type="button"
-              onClick={() => setCurrentView("dashboard")}
+              onClick={() => switchView("dashboard")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "dashboard"
                   ? "bg-primary text-primary-foreground shadow-sm font-bold"
@@ -406,7 +437,7 @@ export default function PipelinesPage() {
 
             <button
               type="button"
-              onClick={() => setCurrentView("active")}
+              onClick={() => switchView("active")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "active"
                   ? "bg-background text-foreground shadow-sm font-semibold"
@@ -419,7 +450,7 @@ export default function PipelinesPage() {
 
             <button
               type="button"
-              onClick={() => setCurrentView("schedule")}
+              onClick={() => switchView("schedule")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "schedule"
                   ? "bg-background text-foreground shadow-sm font-semibold"
@@ -432,7 +463,7 @@ export default function PipelinesPage() {
 
             <button
               type="button"
-              onClick={() => setCurrentView("won")}
+              onClick={() => switchView("won")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "won"
                   ? "bg-emerald-500/20 text-emerald-400 shadow-sm font-semibold"
@@ -445,7 +476,7 @@ export default function PipelinesPage() {
 
             <button
               type="button"
-              onClick={() => setCurrentView("lost")}
+              onClick={() => switchView("lost")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "lost"
                   ? "bg-red-500/20 text-red-400 shadow-sm font-semibold"
@@ -458,7 +489,7 @@ export default function PipelinesPage() {
 
             <button
               type="button"
-              onClick={() => setCurrentView("archive")}
+              onClick={() => switchView("archive")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "archive"
                   ? "bg-background text-foreground shadow-sm font-semibold"
@@ -471,7 +502,7 @@ export default function PipelinesPage() {
 
             <button
               type="button"
-              onClick={() => setCurrentView("offerings")}
+              onClick={() => switchView("offerings")}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 currentView === "offerings"
                   ? "bg-background text-foreground shadow-sm font-semibold"
