@@ -73,7 +73,7 @@ export function CallOutcomeModal({ open, onOpenChange, deal, onSuccess }: CallOu
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-w-[calc(100vw-1.5rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <Phone className="size-5 text-emerald-400" />
@@ -335,7 +335,7 @@ export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: Sc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-card border-border">
+      <DialogContent className="max-w-[calc(100vw-1.5rem)] sm:max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground text-lg">
             <Calendar className="size-5 text-primary" />
