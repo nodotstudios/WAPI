@@ -25,13 +25,13 @@ export function MobileNavBar({ unreadCount = 0 }: MobileNavBarProps) {
       href: "/pipelines",
       label: "CRM",
       icon: Kanban,
-      active: pathname.startsWith("/pipelines"),
+      active: pathname.startsWith("/pipelines") && !pathname.includes("schedule"),
     },
     {
-      href: "/pipelines?tab=schedule",
+      href: "/pipelines?view=schedule",
       label: "Schedule",
       icon: Calendar,
-      active: pathname.startsWith("/pipelines") && pathname.includes("tab=schedule"),
+      active: pathname.startsWith("/pipelines") && (pathname.includes("schedule") || pathname.includes("tab=schedule")),
     },
     {
       href: "/settings",

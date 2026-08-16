@@ -36,6 +36,7 @@ import {
   Plus,
   Sparkles,
   TrendingUp,
+  MoreVertical,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
@@ -1246,108 +1247,84 @@ export function MessageThread({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Create Deal Button */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setNewDealTitle(`Deal with ${contactDisplayName}`);
-              setCreateDealModalOpen(true);
-            }}
-            className="h-7 gap-1 px-2 text-xs border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
-            title="Create Deal in CRM Pipeline for this contact"
-          >
-            <Plus className="size-3.5" />
-            <span className="hidden md:inline">Create Deal</span>
-          </Button>
+        <div className="flex items-center gap-1 sm:gap-2">
+          {/* Desktop Toolbar Action Buttons (sm+) */}
+          <div className="hidden items-center gap-1.5 sm:flex sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setNewDealTitle(`Deal with ${contactDisplayName}`);
+                setCreateDealModalOpen(true);
+              }}
+              className="h-7 gap-1 px-2 text-xs border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+              title="Create Deal in CRM Pipeline for this contact"
+            >
+              <Plus className="size-3.5" />
+              <span className="hidden md:inline">Create Deal</span>
+            </Button>
 
-          {/* Log Conversion (Meta CAPI) Button */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setConversionModalOpen(true)}
-            className="h-7 gap-1 px-2 text-xs border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
-            title="Log Sale or Qualify Lead (Syncs with CRM & Facebook Pixel)"
-          >
-            <DollarSign className="size-3.5" />
-            <span className="hidden sm:inline">Log Sale</span>
-          </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConversionModalOpen(true)}
+              className="h-7 gap-1 px-2 text-xs border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
+              title="Log Sale or Qualify Lead (Syncs with CRM & Facebook Pixel)"
+            >
+              <DollarSign className="size-3.5" />
+              <span className="hidden sm:inline">Log Sale</span>
+            </Button>
 
-          {/* Direct Call & Video Call Buttons */}
-          <a
-            href={`tel:${contact.phone}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Start Voice Call"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-emerald-400 transition-colors"
-          >
-            <Phone className="h-4 w-4" />
-          </a>
-          <a
-            href={`https://wa.me/${contact.phone.replace(/\D/g, '')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open WhatsApp Direct Call"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-emerald-400 transition-colors"
-          >
-            <Video className="h-4 w-4" />
-          </a>
-          {/* Contact-panel toggle — desktop only. The contact sidebar
-              eats a chunk of horizontal width that crowds the thread on
-              smaller laptops; this lets agents reclaim it when they just
-              want to read and reply. Hidden on mobile, where the sidebar
-              never renders as a permanent panel anyway. Issue #258. */}
-          {onToggleContactPanel && (
+            <a
+              href={`tel:${contact.phone}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Start Voice Call"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-emerald-400 transition-colors"
+            >
+              <Phone className="h-4 w-4" />
+            </a>
+            <a
+              href={`https://wa.me/${contact.phone.replace(/\D/g, '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open WhatsApp Direct Call"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-emerald-400 transition-colors"
+            >
+              <Video className="h-4 w-4" />
+            </a>
+
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={handleRefreshClick}
+                disabled={isRefreshing}
+                aria-label={t("refreshConversation")}
+                title={t("refresh")}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+              >
+                <RefreshCw
+                  className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
+                />
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={onToggleContactPanel}
-              aria-label={
-                contactPanelOpen ? t("hideContactPanel") : t("showContactPanel")
-              }
-              title={contactPanelOpen ? t("hideContact") : t("showContact")}
-              aria-pressed={contactPanelOpen}
-              className={cn(
-                "hidden h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-muted hover:text-foreground lg:inline-flex",
-                contactPanelOpen ? "text-primary" : "text-muted-foreground",
-              )}
+              onClick={() => setClearChatModalOpen(true)}
+              title="Clear Chat History from CRM (Free Storage)"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-red-400"
             >
-              {contactPanelOpen ? (
-                <PanelRightClose className="h-4 w-4" />
-              ) : (
-                <PanelRightOpen className="h-4 w-4" />
-              )}
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
-          )}
+          </div>
 
-          {/* Manual refresh — forces a refetch of the messages + the
-              conversation list (the parent bumps its resyncToken). Useful
-              when realtime missed an event or the agent just wants to be
-              sure nothing's stale. Only rendered when the parent wires
-              up `onRefresh`. */}
-          {onRefresh && (
-            <button
-              type="button"
-              onClick={handleRefreshClick}
-              disabled={isRefreshing}
-              aria-label={t("refreshConversation")}
-              title={t("refresh")}
-              className={cn(
-                "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60",
-              )}
-            >
-              <RefreshCw
-                className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
-              />
-            </button>
-          )}
-
-          {/* Status dropdown */}
+          {/* Status dropdown — visible on all screen sizes */}
           <DropdownMenu>
             <DropdownMenuTrigger className={cn(
-                  "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
+                  "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted border border-border/50",
                   currentStatus?.color ?? "text-muted-foreground"
                 )}>
                 {currentStatus ? t(`status${currentStatus.label}`) : t("status")}
@@ -1369,11 +1346,11 @@ export function MessageThread({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Assign dropdown */}
+          {/* Assign dropdown — hidden on smallest screens, available in More menu */}
           <DropdownMenu>
             <DropdownMenuTrigger
               className={cn(
-                "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
+                "hidden sm:inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted border border-border/50",
                 assignedAgentId ? "text-primary" : "text-muted-foreground"
               )}
             >
@@ -1434,15 +1411,76 @@ export function MessageThread({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Clear Chat History from CRM button */}
-          <button
-            type="button"
-            onClick={() => setClearChatModalOpen(true)}
-            title="Clear Chat History from CRM (Free Storage)"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-red-400"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {/* Mobile "More Actions" Dropdown Menu (< sm) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex h-7 w-7 items-center justify-center rounded-md border border-border/50 text-muted-foreground hover:bg-muted hover:text-foreground sm:hidden">
+              <MoreVertical className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-popover text-popover-foreground border-border">
+              <DropdownMenuItem
+                onClick={() => {
+                  setNewDealTitle(`Deal with ${contactDisplayName}`);
+                  setCreateDealModalOpen(true);
+                }}
+                className="text-xs gap-2 text-primary focus:text-primary"
+              >
+                <Plus className="size-3.5" />
+                Create Deal
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setConversionModalOpen(true)}
+                className="text-xs gap-2 text-emerald-400 focus:text-emerald-300"
+              >
+                <DollarSign className="size-3.5" />
+                Log Sale / Qualify
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-border" />
+              <DropdownMenuItem
+                render={
+                  <a
+                    href={`tel:${contact.phone}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs gap-2 flex items-center"
+                  />
+                }
+              >
+                <Phone className="size-3.5 text-emerald-400" />
+                Voice Call
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                render={
+                  <a
+                    href={`https://wa.me/${contact.phone.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs gap-2 flex items-center"
+                  />
+                }
+              >
+                <Video className="size-3.5 text-emerald-400" />
+                WhatsApp Call
+              </DropdownMenuItem>
+              {onRefresh && (
+                <DropdownMenuItem
+                  onClick={handleRefreshClick}
+                  disabled={isRefreshing}
+                  className="text-xs gap-2"
+                >
+                  <RefreshCw className={cn("size-3.5", isRefreshing && "animate-spin")} />
+                  Refresh Thread
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator className="bg-border" />
+              <DropdownMenuItem
+                onClick={() => setClearChatModalOpen(true)}
+                className="text-xs gap-2 text-red-400 focus:text-red-300"
+              >
+                <Trash2 className="size-3.5" />
+                Clear Chat History
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

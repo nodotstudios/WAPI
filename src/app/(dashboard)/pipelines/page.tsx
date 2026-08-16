@@ -76,7 +76,8 @@ function PipelinesPageInner() {
   const canCreateDeals = useCan("send-messages");
   const { accountId, user } = useAuth();
 
-  const viewParam = searchParams.get("view") as CrmViewTab | null;
+  const rawView = searchParams.get("view") || searchParams.get("tab");
+  const viewParam = rawView as CrmViewTab | null;
   const [currentView, setCurrentView] = useState<CrmViewTab>(
     viewParam && ["dashboard", "active", "schedule", "won", "lost", "archive", "offerings"].includes(viewParam)
       ? viewParam
