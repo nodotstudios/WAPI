@@ -561,8 +561,24 @@ function InboxPageInner() {
   // before, unchanged.
   const hasActiveConv = !!activeConversation;
 
+  useEffect(() => {
+    if (hasActiveConv) {
+      document.documentElement.classList.add("hide-mobile-nav");
+    } else {
+      document.documentElement.classList.remove("hide-mobile-nav");
+    }
+    return () => {
+      document.documentElement.classList.remove("hide-mobile-nav");
+    };
+  }, [hasActiveConv]);
+
   return (
-    <div className="flex h-[calc(100dvh-3.5rem-4rem)] lg:h-[calc(100dvh-3.5rem)] flex-col overflow-hidden w-full max-w-full">
+    <div className={cn(
+      "flex flex-col overflow-hidden w-full max-w-full",
+      hasActiveConv
+        ? "h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-3.5rem)]"
+        : "h-[calc(100dvh-3.5rem-4rem)] lg:h-[calc(100dvh-3.5rem)]"
+    )}>
       {/* WhatsApp connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}
       {whatsappConnected === false && (

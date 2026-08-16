@@ -42,7 +42,7 @@ export function MobileNavBar({ unreadCount = 0 }: MobileNavBarProps) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-md pb-safe lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-border/80 bg-background/95 backdrop-blur-md pb-safe lg:hidden [.hide-mobile-nav_&]:hidden">
       {navItems.map((item) => {
         const Icon = item.icon;
         return (

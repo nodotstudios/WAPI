@@ -134,7 +134,15 @@ export function MessageComposer({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [drafting, setDrafting] = useState(false);
+  const [isMobileScreen, setIsMobileScreen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobileScreen(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Quick-reply picker & smart suggestion state.
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
@@ -707,7 +715,9 @@ export function MessageComposer({
                 ? t("readOnlyPlaceholder")
                 : sessionExpired
                   ? t("sessionExpiredPlaceholder")
-                  : t("typeMessagePlaceholder")
+                  : isMobileScreen
+                    ? "Type a message..."
+                    : t("typeMessagePlaceholder")
             }
             disabled={sessionExpired || readOnly}
             rows={1}
@@ -730,12 +740,6 @@ export function MessageComposer({
           </GatedButton>
         </div>
       </div>
-      )}
-
-      {!draft && !recording && (
-        <p className="mt-1 pl-[5.5rem] text-[10px] text-muted-foreground">
-          {t("draftHint")}
-        </p>
       )}
 
       {/* Quick-reply picker. */}
