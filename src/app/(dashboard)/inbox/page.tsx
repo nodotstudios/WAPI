@@ -574,10 +574,10 @@ function InboxPageInner() {
 
   return (
     <div className={cn(
-      "flex flex-col overflow-hidden w-full max-w-full",
+      "flex flex-col overflow-hidden w-full h-full max-w-full",
       hasActiveConv
-        ? "h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-3.5rem)]"
-        : "h-[calc(100dvh-3.5rem-4rem)] lg:h-[calc(100dvh-3.5rem)]"
+        ? "h-[calc(100dvh-3.5rem)] lg:h-full"
+        : "h-[calc(100dvh-3.5rem-4rem)] lg:h-full"
     )}>
       {/* WhatsApp connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}

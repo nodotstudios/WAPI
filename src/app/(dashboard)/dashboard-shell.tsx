@@ -55,7 +55,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <Header onOpenSidebar={() => setSidebarOpen(true)} />
         {/* Thinner horizontal padding on mobile so cards have room to breathe. */}
-        <main className={cn("flex-1 overflow-y-auto pb-16 lg:pb-6", isInbox ? "p-0 lg:p-6" : "p-3 sm:p-6")}>
+        <main className={cn("flex-1 min-w-0 min-h-0", isInbox ? "p-0 overflow-hidden" : "overflow-y-auto p-3 sm:p-6 pb-16 lg:pb-6")}>
           {/* Above every page: writes are being rejected and here's why.
               Renders nothing unless the account/role failed to resolve. */}
           <AccountAccessAlert />
