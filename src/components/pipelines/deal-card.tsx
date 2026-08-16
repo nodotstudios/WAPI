@@ -1,7 +1,7 @@
 "use client";
 
 import type { Deal, PipelineStage } from "@/types";
-import { Calendar, Check, X } from "lucide-react";
+import { Calendar, Check, X, MessageSquare } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 import { useTranslations } from "next-intl";
 
@@ -72,12 +72,27 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
         )}
       </div>
 
-      {/* Contact row */}
-      <div className="mt-2 flex items-center gap-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground">
-          {initials(deal.contact?.name, deal.contact?.phone)}
-        </span>
-        <span className="truncate text-xs text-muted-foreground">{contactLabel}</span>
+      {/* Contact row with direct Chat button */}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground">
+            {initials(deal.contact?.name, deal.contact?.phone)}
+          </span>
+          <span className="truncate text-xs text-muted-foreground">{contactLabel}</span>
+        </div>
+        {deal.contact_id && (
+          <a
+            href={`/inbox?contact_id=${deal.contact_id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+            title="Open Chat in Inbox"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+          >
+            <MessageSquare className="size-3" />
+            Chat
+          </a>
+        )}
       </div>
 
       <div className="mt-2 flex items-center justify-between">

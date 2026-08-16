@@ -29,6 +29,8 @@ import {
   User,
   Plus,
   Loader2,
+  Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -318,6 +320,16 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {act.contact_id && (
+                      <a
+                        href={`/inbox?contact_id=${act.contact_id}`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600/90 text-white hover:bg-emerald-600 transition-colors shadow-sm"
+                      >
+                        <MessageSquare className="size-3.5" />
+                        Open Chat
+                      </a>
+                    )}
+
                     {act.google_meet_url && (
                       <a
                         href={act.google_meet_url}

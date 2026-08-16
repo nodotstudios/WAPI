@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Phone, Calendar, Video, StickyNote, Loader2, Clock } from "lucide-react";
+import { Phone, Calendar, Video, StickyNote, Loader2, Clock, MessageSquare, Send } from "lucide-react";
 import { toast } from "sonner";
 import type { Deal } from "@/types";
 
@@ -431,6 +431,190 @@ export function ScheduleMeetingModal({ open, onOpenChange, deal, onSuccess }: Sc
             className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
           >
             {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : "Schedule Meeting"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ScheduleFollowUpModal({
+  open,
+  onOpenChange,
+  deal,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  deal: Deal | null;
+  onSuccess: () => void;
+}) {
+  const [channel, setChannel] = useState<"chat" | "call" | "meeting">("chat");
+  const [title, setTitle] = useState(
+    deal ? `Follow-up with ${deal.contact?.name || deal.title}` : "Client Follow-up"
+  );
+  const [dateTime, setDateTime] = useState(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + 2, 0, 0, 0);
+    return d.toISOString();
+  });
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!deal || !dateTime) {
+      toast.error("Please select a follow-up date and time");
+      return;
+    }
+    setSaving(true);
+    try {
+      const typeStr = channel === "chat" ? "chat_followup" : channel === "call" ? "call_followup" : "meeting_followup";
+      const res = await fetch("/api/crm/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deal_id: deal.id,
+          contact_id: deal.contact_id,
+          type: typeStr,
+          title: title.trim(),
+          description: notes.trim() || null,
+          scheduled_at: dateTime,
+          status: "pending",
+          next_follow_up_at: dateTime,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to schedule follow-up");
+        return;
+      }
+
+      toast.success(
+        channel === "chat"
+          ? "WhatsApp Chat follow-up scheduled!"
+          : channel === "call"
+          ? "Call follow-up scheduled!"
+          : "Follow-up meeting scheduled!"
+      );
+      onOpenChange(false);
+      onSuccess();
+    } catch {
+      toast.error("An error occurred while scheduling follow-up");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[calc(100vw-1.5rem)] sm:max-w-md bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-foreground text-lg">
+            <Clock className="size-5 text-primary" />
+            Schedule Follow-up
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Channel selector */}
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Follow-up Channel
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setChannel("chat")}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 text-xs font-medium transition-all ${
+                  channel === "chat"
+                    ? "border-emerald-500 bg-emerald-500/15 text-emerald-400 font-semibold"
+                    : "border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <MessageSquare className="size-4" />
+                Chat / WA
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChannel("call")}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 text-xs font-medium transition-all ${
+                  channel === "call"
+                    ? "border-primary bg-primary/15 text-primary font-semibold"
+                    : "border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <Phone className="size-4" />
+                Phone Call
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChannel("meeting")}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2.5 text-xs font-medium transition-all ${
+                  channel === "meeting"
+                    ? "border-blue-500 bg-blue-500/15 text-blue-400 font-semibold"
+                    : "border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                <Video className="size-4" />
+                Meeting
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Follow-up Title
+            </label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Check proposal feedback via Chat"
+              className="bg-muted text-foreground border-border text-sm rounded-xl h-10"
+            />
+          </div>
+
+          <ModernDateTimePicker
+            value={dateTime}
+            onChange={(iso) => setDateTime(iso)}
+            label="Scheduled Date & Time"
+          />
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Follow-up Notes / Message Draft
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="What to ask or message during follow-up..."
+              rows={2}
+              className="w-full rounded-xl border border-border bg-muted p-2.5 text-xs text-foreground outline-none focus:border-primary"
+            />
+          </div>
+
+          {deal?.contact_id && channel === "chat" && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-400">
+              <MessageSquare className="size-4 shrink-0" />
+              <span>When due, you will get 1-tap direct action to open chat in Inbox with pre-filled reminder!</span>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="mt-2">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving} className="rounded-xl">
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={saving || !title.trim() || !dateTime}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
+          >
+            {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : "Save Follow-up"}
           </Button>
         </DialogFooter>
       </DialogContent>

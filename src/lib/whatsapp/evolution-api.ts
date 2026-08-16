@@ -139,15 +139,22 @@ export async function sendEvolutionMedia(
       }
     }
 
+    let cleanMediaUrl = mediaUrl.trim();
+    try {
+      cleanMediaUrl = new URL(mediaUrl).href;
+    } catch {
+      cleanMediaUrl = encodeURI(mediaUrl);
+    }
+
     const payload: Record<string, any> = {
       number: cleanPhone,
       mediatype: mediaType,
-      media: mediaUrl,
+      media: cleanMediaUrl,
       caption: caption || '',
       fileName: docFileName || undefined,
       mediaMessage: {
         mediatype: mediaType,
-        media: mediaUrl,
+        media: cleanMediaUrl,
         caption: caption || '',
         fileName: docFileName || undefined,
       },
@@ -164,6 +171,46 @@ export async function sendEvolutionMedia(
 
     if (!response.ok) {
       const errText = await response.text()
+
+      // If Evolution API failed to stream/download the media URL, fetch it server-side and retry as Base64 data URL
+      if (errText.includes('Failed to fetch stream') || response.status === 500) {
+        try {
+          const fileRes = await fetch(cleanMediaUrl);
+          if (fileRes.ok) {
+            const buffer = await fileRes.arrayBuffer();
+            const base64Str = Buffer.from(buffer).toString('base64');
+            const contentType = fileRes.headers.get('content-type') || 'application/octet-stream';
+            const base64DataUrl = `data:${contentType};base64,${base64Str}`;
+
+            const base64Payload = {
+              ...payload,
+              media: base64DataUrl,
+              mediaMessage: {
+                ...payload.mediaMessage,
+                media: base64DataUrl,
+              },
+            };
+
+            const retryRes = await fetch(`${baseUrl}/message/sendMedia/${config.instanceName}`, {
+              method: 'POST',
+              headers: {
+                'apikey': config.apiKey,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(base64Payload),
+            });
+
+            if (retryRes.ok) {
+              const retryData = await retryRes.json();
+              const messageId = retryData?.key?.id || retryData?.id || `evo_${Date.now()}`;
+              return { success: true, messageId };
+            }
+          }
+        } catch (fallbackErr) {
+          console.error('Base64 fallback send error:', fallbackErr);
+        }
+      }
+
       return { success: false, error: errText }
     }
 

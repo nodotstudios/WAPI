@@ -35,8 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { createClient } from "@/lib/supabase/client";
-import { CallOutcomeModal } from "./activity-modals";
-import { ScheduleMeetingModal } from "./activity-modals";
+import { CallOutcomeModal, ScheduleMeetingModal, ScheduleFollowUpModal } from "./activity-modals";
 import { WonReasonModal, LostReasonModal } from "./won-lost-modals";
 import type { Deal, CrmActivity, PipelineStage } from "@/types";
 
@@ -65,6 +64,7 @@ export function DealDetailWorkspace({
   // Modals
   const [callModalOpen, setCallModalOpen] = useState(false);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
   const [wonModalOpen, setWonModalOpen] = useState(false);
   const [lostModalOpen, setLostModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -337,6 +337,15 @@ export function DealDetailWorkspace({
                     >
                       <Phone className="size-3.5" />
                       Log / Schedule Call
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      onClick={() => setFollowUpModalOpen(true)}
+                      className="h-8.5 gap-1.5 text-xs bg-purple-600/90 text-white hover:bg-purple-600 shadow-sm"
+                    >
+                      <Sparkles className="size-3.5" />
+                      Schedule Follow-up
                     </Button>
 
                     <Button
@@ -647,6 +656,16 @@ export function DealDetailWorkspace({
             onOpenChange={setMeetingModalOpen}
             deal={deal}
             onSuccess={loadDealAndTimeline}
+          />
+
+          <ScheduleFollowUpModal
+            open={followUpModalOpen}
+            onOpenChange={setFollowUpModalOpen}
+            deal={deal}
+            onSuccess={() => {
+              void loadDealAndTimeline();
+              onDealUpdated();
+            }}
           />
 
           <WonReasonModal
