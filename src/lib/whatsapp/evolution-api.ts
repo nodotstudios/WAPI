@@ -117,11 +117,41 @@ export async function sendEvolutionMedia(
   toPhone: string,
   mediaUrl: string,
   mediaType: 'image' | 'video' | 'document' | 'audio',
-  caption?: string
+  caption?: string,
+  filename?: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const baseUrl = config.gatewayUrl.replace(/\/$/, '')
     const cleanPhone = toPhone.replace(/\D/g, '')
+
+    let docFileName = filename?.trim();
+    if (mediaType === 'document') {
+      if (!docFileName) {
+        const urlPath = mediaUrl.split('?')[0];
+        const extracted = urlPath.split('/').pop();
+        if (extracted && extracted.includes('.')) {
+          docFileName = extracted;
+        } else {
+          docFileName = 'Document.pdf';
+        }
+      } else if (!docFileName.includes('.')) {
+        docFileName = `${docFileName}.pdf`;
+      }
+    }
+
+    const payload: Record<string, any> = {
+      number: cleanPhone,
+      mediatype: mediaType,
+      media: mediaUrl,
+      caption: caption || '',
+      fileName: docFileName || undefined,
+      mediaMessage: {
+        mediatype: mediaType,
+        media: mediaUrl,
+        caption: caption || '',
+        fileName: docFileName || undefined,
+      },
+    };
 
     const response = await fetch(`${baseUrl}/message/sendMedia/${config.instanceName}`, {
       method: 'POST',
@@ -129,17 +159,7 @@ export async function sendEvolutionMedia(
         'apikey': config.apiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        number: cleanPhone,
-        mediatype: mediaType,
-        media: mediaUrl,
-        caption: caption || '',
-        mediaMessage: {
-          mediatype: mediaType,
-          media: mediaUrl,
-          caption: caption || '',
-        },
-      }),
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {

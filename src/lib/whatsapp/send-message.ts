@@ -429,7 +429,7 @@ export async function sendMessageToConversation(
       if (messageType === 'audio') {
         result = await sendEvolutionAudio(evoConfig, sanitizedPhone, mediaUrl);
       } else {
-        result = await sendEvolutionMedia(evoConfig, sanitizedPhone, mediaUrl, messageType as any, contentText || undefined);
+        result = await sendEvolutionMedia(evoConfig, sanitizedPhone, mediaUrl, messageType as any, contentText || undefined, filename || undefined);
       }
     } else {
       const text = contentText || '';

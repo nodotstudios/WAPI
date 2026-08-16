@@ -299,7 +299,21 @@ export async function sendMediaMessage(
   // document accepts a filename.
   const media: Record<string, unknown> = { link }
   if (caption && kind !== 'audio') media.caption = caption
-  if (kind === 'document' && filename) media.filename = filename
+  if (kind === 'document') {
+    let docName = filename?.trim()
+    if (!docName) {
+      const urlPath = link.split('?')[0]
+      const extracted = urlPath.split('/').pop()
+      if (extracted && extracted.includes('.')) {
+        docName = extracted
+      } else {
+        docName = 'Document.pdf'
+      }
+    } else if (!docName.includes('.')) {
+      docName = `${docName}.pdf`
+    }
+    media.filename = docName
+  }
 
   const body: Record<string, unknown> = {
     messaging_product: 'whatsapp',
