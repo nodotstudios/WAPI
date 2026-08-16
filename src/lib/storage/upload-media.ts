@@ -81,15 +81,32 @@ export interface UploadAccountMediaResult {
   publicUrl: string;
   /** Storage object path (account-scoped). */
   path: string;
+  /** Content SHA-256 hash */
+  hash?: string;
+  /** Whether upload was bypassed due to content deduplication */
+  isDeduplicated?: boolean;
+}
+
+/**
+ * Compute SHA-256 content hash for a file.
+ * Uses Web Crypto API for fast, browser-native hashing.
+ */
+export async function computeFileHash(file: File): Promise<string> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    // Fallback identifier if crypto.subtle is unavailable
+    return `fallback_${file.size}_${file.name.replace(/[^a-z0-9]/gi, "")}`;
+  }
 }
 
 /**
  * Upload a file to an account-scoped Storage bucket and return its public
- * URL. Throws with a user-facing message on auth / account-resolution /
- * upload failure — callers surface it via a toast.
- *
- * Size validation is the caller's responsibility (limits can differ per
- * feature); `MEDIA_MAX_BYTES` is exported for the common case.
+ * URL. Employs Content-Addressable Storage (CAS) with SHA-256 hashing to
+ * skip re-uploading identical files (e.g. sharing portfolios across multiple chats).
  */
 export async function uploadAccountMedia(
   bucket: string,
@@ -106,8 +123,7 @@ export async function uploadAccountMedia(
   }
 
   // Resolve account_id so the path is account-scoped (matches the
-  // bucket's RLS write policy from migration 020/023). User-scoped
-  // paths would be rejected.
+  // bucket's RLS write policy from migration 020/023).
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
     .select("account_id")
@@ -117,10 +133,38 @@ export async function uploadAccountMedia(
     throw new Error("Could not resolve your account.");
   }
 
-  const path = buildMediaPath(profile.account_id as string, file.name);
+  const accountId = profile.account_id as string;
+  const hash = await computeFileHash(file);
+  const hasExt = /\.[^.]+$/.test(file.name);
+  const ext = hasExt ? file.name.split(".").pop()!.toLowerCase() : "bin";
+  
+  // Content-Addressable Storage path under account folder
+  const casFolder = `account-${accountId}/cas`;
+  const fileNameWithHash = `${hash}.${ext}`;
+  const path = `${casFolder}/${fileNameWithHash}`;
+
+  // Check if file content hash already exists in bucket storage
+  try {
+    const { data: existingFiles } = await supabase.storage
+      .from(bucket)
+      .list(casFolder, {
+        search: fileNameWithHash,
+        limit: 1,
+      });
+
+    if (existingFiles && existingFiles.some((f) => f.name === fileNameWithHash)) {
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(bucket).getPublicUrl(path);
+      return { publicUrl, path, hash, isDeduplicated: true };
+    }
+  } catch {
+    // If list check fails, fallback to normal upload
+  }
+
   const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
-    cacheControl: "3600",
-    upsert: false,
+    cacheControl: "31536000, immutable",
+    upsert: true,
     contentType: file.type,
   });
   if (upErr) throw new Error(upErr.message);
@@ -129,7 +173,7 @@ export async function uploadAccountMedia(
     data: { publicUrl },
   } = supabase.storage.from(bucket).getPublicUrl(path);
 
-  return { publicUrl, path };
+  return { publicUrl, path, hash, isDeduplicated: false };
 }
 
 /**
@@ -146,6 +190,11 @@ export async function deleteAccountMedia(
   bucket: string,
   path: string,
 ): Promise<void> {
+  // Content-Addressable Storage (CAS) shared objects should never be deleted on draft cancel
+  // as they are deduplicated across multiple messages, quick replies, and chats.
+  if (path.includes("/cas/")) {
+    return;
+  }
   const supabase = createClient();
   const { error } = await supabase.storage.from(bucket).remove([path]);
   if (error) throw new Error(error.message);
