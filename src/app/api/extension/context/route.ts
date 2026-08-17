@@ -22,11 +22,9 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const rawPhone = url.searchParams.get("phone") || "";
+    const rawName = url.searchParams.get("name") || "";
     const phone = cleanPhone(rawPhone);
-
-    if (!phone) {
-      return NextResponse.json({ error: "phone parameter is required" }, { status: 400, headers: corsHeaders() });
-    }
+    const contactName = rawName.trim() || (phone ? `WhatsApp Contact (${phone.slice(-4)})` : "WhatsApp Contact");
 
     // Authenticate via API key or session
     let accountId: string | null = null;
@@ -68,15 +66,46 @@ export async function GET(request: Request) {
         .eq("id", userId);
     }
 
-    // Find contact by phone (ends_with or exact digits)
-    const { data: contacts } = await supabase
-      .from("contacts")
-      .select("*, tags:contact_tags(tags(*))")
+    // Fetch active pipeline stages for account
+    const { data: stages } = await supabase
+      .from("pipeline_stages")
+      .select("*")
       .eq("account_id", accountId)
-      .or(`phone.eq.${phone},phone.ilike.%${phone.slice(-10)}%`)
-      .limit(1);
+      .order("position", { ascending: true });
 
-    let contact = contacts && contacts.length > 0 ? contacts[0] : null;
+    // If no phone or name was specified (e.g. extension loaded without active chat)
+    if (!phone && !rawName) {
+      return NextResponse.json({
+        success: true,
+        account_id: accountId,
+        contact: null,
+        deal: null,
+        stages: stages || [],
+        activities: [],
+      }, { headers: corsHeaders() });
+    }
+
+    // Find contact by phone or name
+    let contact = null;
+    if (phone && phone.length >= 7) {
+      const { data: contacts } = await supabase
+        .from("contacts")
+        .select("*, tags:contact_tags(tags(*))")
+        .eq("account_id", accountId)
+        .or(`phone.eq.${phone},phone.ilike.%${phone.slice(-10)}%`)
+        .limit(1);
+      if (contacts && contacts.length > 0) contact = contacts[0];
+    }
+
+    if (!contact && rawName) {
+      const { data: nameContacts } = await supabase
+        .from("contacts")
+        .select("*, tags:contact_tags(tags(*))")
+        .eq("account_id", accountId)
+        .ilike("name", `%${rawName}%`)
+        .limit(1);
+      if (nameContacts && nameContacts.length > 0) contact = nameContacts[0];
+    }
 
     // Auto-create contact if not found yet
     if (!contact) {
@@ -84,8 +113,8 @@ export async function GET(request: Request) {
         .from("contacts")
         .insert({
           account_id: accountId,
-          phone: phone,
-          name: `WhatsApp Contact (${phone.slice(-4)})`,
+          phone: phone || rawName.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || `wa_${Date.now()}`,
+          name: contactName,
         })
         .select()
         .single();
@@ -94,21 +123,6 @@ export async function GET(request: Request) {
         contact = newContact;
       }
     }
-
-    // Fetch active pipeline stages for account
-    const { data: defaultPipeline } = await supabase
-      .from("pipelines")
-      .select("id")
-      .eq("account_id", accountId)
-      .eq("is_default", true)
-      .single();
-
-    const pipelineId = defaultPipeline?.id;
-    const { data: stages } = await supabase
-      .from("pipeline_stages")
-      .select("*")
-      .eq("account_id", accountId)
-      .order("position", { ascending: true });
 
     // Fetch active deal for contact
     let deal = null;

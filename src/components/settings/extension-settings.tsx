@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 interface TeamMember {
-  id: string;
-  name?: string;
-  email?: string;
-  user_id?: string;
+  user_id: string;
+  full_name: string;
+  email: string | null;
+  role: string;
   last_seen_at?: string;
 }
 
@@ -31,41 +31,48 @@ export function ExtensionSettings() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [selectedMember, setSelectedMember] = useState<string>("");
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [loadingKeys, setLoadingKeys] = useState(true);
 
-  const loadData = async () => {
+  const loadKeys = async () => {
     try {
-      const [keysRes, membersRes] = await Promise.all([
-        fetch("/api/account/api-keys", { cache: "no-store" }),
-        fetch("/api/account/members", { cache: "no-store" }),
-      ]);
-
-      if (keysRes.ok) {
-        const keysData = await keysRes.json();
-        if (Array.isArray(keysData.keys)) {
-          setExistingKeys(keysData.keys.filter((k: ApiKeyRow) => !k.revoked_at));
+      const res = await fetch("/api/account/api-keys", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.keys)) {
+          setExistingKeys(data.keys.filter((k: ApiKeyRow) => !k.revoked_at));
         }
       }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingKeys(false);
+    }
+  };
 
-      if (membersRes.ok) {
-        const membersData = await membersRes.json();
-        if (Array.isArray(membersData.members)) {
-          setMembers(membersData.members);
+  const loadMembers = async () => {
+    try {
+      const res = await fetch("/api/account/members", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.members)) {
+          setMembers(data.members);
         }
       }
-    } catch (err) {
-      console.error("Failed to load settings data:", err);
+    } catch {
+      // ignore
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadKeys();
+    loadMembers();
   }, []);
 
   const handleGenerateKey = async () => {
     setGenerating(true);
     try {
-      const targetMember = members.find((m) => m.id === selectedMember || m.user_id === selectedMember);
-      const memberName = targetMember?.name || targetMember?.email || "Team Member";
+      const targetMember = members.find((m) => m.user_id === selectedMember);
+      const memberName = targetMember?.full_name || targetMember?.email || "Team Member";
 
       const res = await fetch("/api/account/api-keys", {
         method: "POST",
@@ -85,7 +92,7 @@ export function ExtensionSettings() {
       const keyString = typeof data.plaintext === "string" ? data.plaintext : "";
       setCreatedKey(keyString);
       toast.success(`Extension API key created for ${memberName}!`);
-      loadData();
+      loadKeys();
     } catch {
       toast.error("Failed to generate API Key");
     } finally {
@@ -223,8 +230,8 @@ export function ExtensionSettings() {
             >
               <option value="">-- Select Team Member --</option>
               {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name || m.email || "Team Member"} {isMemberOnline(m.last_seen_at) ? "(🟢 Online)" : "(⚪ Offline)"}
+                <option key={m.user_id} value={m.user_id}>
+                  {m.full_name || m.email || "Team Member"} {isMemberOnline(m.last_seen_at) ? "(🟢 Online)" : "(⚪ Offline)"}
                 </option>
               ))}
             </select>
