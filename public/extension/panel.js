@@ -175,7 +175,6 @@ btnLogout.addEventListener("click", () => {
 
 // Toggle New Offer Creator Box
 btnToggleNewOffer.addEventListener("click", () => {
-  if (!currentContact) return;
   const isVisible = newOfferBox.style.display === "block";
   newOfferBox.style.display = isVisible ? "none" : "block";
   if (!isVisible) {
@@ -189,9 +188,12 @@ btnCancelNewOffer.addEventListener("click", () => {
   newOfferValue.value = "0";
 });
 
-// Create New Lead / Offer
+// Create New Lead / Offer (Auto-creates contact if not in CRM)
 btnSaveNewOffer.addEventListener("click", async () => {
-  if (!currentContact || !authToken) return;
+  if (!authToken) {
+    alert("Please sign in first.");
+    return;
+  }
 
   const title = newOfferTitle.value.trim() || "New Client Offer";
   const value = parseFloat(newOfferValue.value) || 0;
@@ -206,7 +208,9 @@ btnSaveNewOffer.addEventListener("click", async () => {
       method: "POST",
       headers: getAuthHeaders(),
       body: JSON.stringify({
-        contact_id: currentContact.id,
+        contact_id: currentContact?.id || undefined,
+        phone: currentPhone || undefined,
+        name: currentName || undefined,
         title,
         value,
         currency,
@@ -218,6 +222,11 @@ btnSaveNewOffer.addEventListener("click", async () => {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || "Failed to create deal");
+    }
+
+    const resData = await res.json();
+    if (resData.deal?.contact) {
+      currentContact = resData.deal.contact;
     }
 
     newOfferBox.style.display = "none";
@@ -563,7 +572,7 @@ function renderTimeline(acts) {
 
 // Save Follow-up / Activity (Syncs to CRM + Google Calendar)
 btnSaveFollowup.addEventListener("click", async () => {
-  if (!currentContact || !authToken) return;
+  if (!authToken) return;
 
   btnSaveFollowup.textContent = "Saving to CRM...";
   btnSaveFollowup.disabled = true;
@@ -574,7 +583,9 @@ btnSaveFollowup.addEventListener("click", async () => {
 
     const body = {
       deal_id: dealId,
-      contact_id: currentContact.id,
+      contact_id: currentContact?.id || undefined,
+      phone: currentPhone || undefined,
+      name: currentName || undefined,
       type: channel,
       title: fuTitle.value.trim() || `Scheduled Follow-up via ${channel}`,
       scheduled_at: fuTime.value ? new Date(fuTime.value).toISOString() : new Date().toISOString(),

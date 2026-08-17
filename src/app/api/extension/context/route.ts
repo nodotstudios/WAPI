@@ -37,6 +37,18 @@ export async function GET(request: Request) {
     const phone = cleanPhone(rawPhone);
     const contactName = rawName.trim() || (phone ? `WhatsApp Contact (${phone.slice(-4)})` : "WhatsApp Contact");
 
+    // Ensure we have a valid fallback user ID
+    let finalUserId = userId;
+    if (!finalUserId) {
+      const { data: member } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("account_id", accountId)
+        .limit(1)
+        .maybeSingle();
+      finalUserId = member?.user_id;
+    }
+
     // 1. Fetch default pipeline and stages for account
     const { data: pipeline } = await supabase
       .from("pipelines")
@@ -93,18 +105,20 @@ export async function GET(request: Request) {
       if (nameContacts && nameContacts.length > 0) contact = nameContacts[0];
     }
 
-    // Auto-create contact if not found
-    if (!contact) {
-      const { data: newContact } = await supabase
+    // Auto-create contact if not found (with required user_id)
+    if (!contact && finalUserId) {
+      const { data: newContact, error: createErr } = await supabase
         .from("contacts")
         .insert({
           account_id: accountId,
+          user_id: finalUserId,
           phone: phone || `wa_${Date.now()}`,
           name: contactName,
         })
         .select("id, name, phone, email")
         .single();
       if (newContact) contact = newContact;
+      else if (createErr) console.error("Context auto-contact create error:", createErr);
     }
 
     // 3. Fetch ALL deals and activities for this contact in parallel

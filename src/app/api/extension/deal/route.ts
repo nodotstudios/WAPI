@@ -88,8 +88,15 @@ export async function POST(request: Request) {
         .select("user_id")
         .eq("account_id", accountId)
         .limit(1)
-        .single();
+        .maybeSingle();
       finalUserId = member?.user_id;
+    }
+
+    if (!finalUserId) {
+      return NextResponse.json(
+        { error: "No user found to associate deal with." },
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
     if (!targetDealId) {
@@ -124,16 +131,17 @@ export async function POST(request: Request) {
           }
         }
 
-        // Create new contact row
+        // Create new contact row with required user_id and account_id
         if (!finalContactId) {
           const { data: newContact, error: createContactErr } = await supabase
             .from("contacts")
             .insert({
               account_id: accountId,
+              user_id: finalUserId,
               phone: phone || `wa_${Date.now()}`,
               name: contactName,
             })
-            .select("id")
+            .select("id, name, phone")
             .single();
 
           if (newContact) {
