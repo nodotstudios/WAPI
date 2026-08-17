@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     let supabase = await createClient();
 
     try {
-      const apiKeyCtx = await requireApiKey(request, "contacts:write");
+      const apiKeyCtx = await requireApiKey(request);
       accountId = apiKeyCtx.accountId;
       supabase = apiKeyCtx.supabase;
     } catch {

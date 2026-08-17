@@ -77,6 +77,16 @@ closeSettingsBtn.addEventListener("click", () => {
   cfgModal.style.display = "none";
 });
 
+function getHeaders() {
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) {
+    const cleanKey = apiKey.trim();
+    headers["Authorization"] = `Bearer ${cleanKey}`;
+    headers["X-API-Key"] = cleanKey;
+  }
+  return headers;
+}
+
 // Fetch CRM context for active contact
 async function fetchCrmContext(phone) {
   if (!phone) return;
@@ -86,11 +96,8 @@ async function fetchCrmContext(phone) {
   cPhone.textContent = phone;
 
   try {
-    const headers = { "Content-Type": "application/json" };
-    if (apiKey) headers["X-API-Key"] = apiKey;
-
     const res = await fetch(`${serverUrl}/api/extension/context?phone=${encodeURIComponent(phone)}`, {
-      headers,
+      headers: getHeaders(),
     });
 
     if (!res.ok) {
@@ -167,9 +174,6 @@ btnSaveDeal.addEventListener("click", async () => {
 
   btnSaveDeal.textContent = "Saving...";
   try {
-    const headers = { "Content-Type": "application/json" };
-    if (apiKey) headers["X-API-Key"] = apiKey;
-
     const body = {
       deal_id: currentDeal?.id,
       contact_id: currentContact.id,
@@ -181,7 +185,7 @@ btnSaveDeal.addEventListener("click", async () => {
 
     const res = await fetch(`${serverUrl}/api/extension/deal`, {
       method: "POST",
-      headers,
+      headers: getHeaders(),
       body: JSON.stringify(body),
     });
 
@@ -203,9 +207,6 @@ btnMarkWon.addEventListener("click", async () => {
 
   btnMarkWon.textContent = "Processing...";
   try {
-    const headers = { "Content-Type": "application/json" };
-    if (apiKey) headers["X-API-Key"] = apiKey;
-
     const body = {
       deal_id: currentDeal?.id,
       contact_id: currentContact.id,
@@ -217,7 +218,7 @@ btnMarkWon.addEventListener("click", async () => {
 
     const res = await fetch(`${serverUrl}/api/extension/deal`, {
       method: "POST",
-      headers,
+      headers: getHeaders(),
       body: JSON.stringify(body),
     });
 
@@ -239,9 +240,6 @@ btnSaveFollowup.addEventListener("click", async () => {
 
   btnSaveFollowup.textContent = "Saving...";
   try {
-    const headers = { "Content-Type": "application/json" };
-    if (apiKey) headers["X-API-Key"] = apiKey;
-
     const channel = fuChannel.value;
     const typeStr = channel === "chat" ? "chat_followup" : channel === "call" ? "call_followup" : "meeting_followup";
 
@@ -255,7 +253,7 @@ btnSaveFollowup.addEventListener("click", async () => {
 
     const res = await fetch(`${serverUrl}/api/extension/activity`, {
       method: "POST",
-      headers,
+      headers: getHeaders(),
       body: JSON.stringify(body),
     });
 

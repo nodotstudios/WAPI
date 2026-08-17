@@ -88,6 +88,23 @@ export async function middleware(request: NextRequest) {
     )
   }
 
+  // Allow Chrome Extension CORS requests
+  if (request.nextUrl.pathname.startsWith('/api/extension/')) {
+    if (request.method === 'OPTIONS') {
+      return new NextResponse(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+        },
+      })
+    }
+    supabaseResponse.headers.set('Access-Control-Allow-Origin', '*')
+    supabaseResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    supabaseResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key')
+  }
+
   return supabaseResponse
 }
 

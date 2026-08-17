@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     let supabase = await createClient();
 
     try {
-      const apiKeyCtx = await requireApiKey(request, "contacts:read");
+      const apiKeyCtx = await requireApiKey(request);
       accountId = apiKeyCtx.accountId;
       supabase = apiKeyCtx.supabase;
       userId = apiKeyCtx.createdBy;
