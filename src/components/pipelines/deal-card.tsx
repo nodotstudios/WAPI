@@ -80,17 +80,19 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
           </span>
           <span className="truncate text-xs text-muted-foreground">{contactLabel}</span>
         </div>
-        {deal.contact_id && (
+        {deal.contact?.phone && (
           <a
-            href={`/inbox?contact_id=${deal.contact_id}`}
+            href={`https://web.whatsapp.com/send?phone=${deal.contact.phone.replace(/\D/g, "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={(e) => {
               e.stopPropagation();
             }}
-            title="Open Chat in Inbox"
+            title="Open Chat in WhatsApp Web"
             className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
           >
             <MessageSquare className="size-3" />
-            Chat
+            WhatsApp ↗
           </a>
         )}
       </div>

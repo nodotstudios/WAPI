@@ -320,13 +320,15 @@ export function ScheduleView({ onSelectDeal }: ScheduleViewProps) {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {act.contact_id && (
+                    {act.contact?.phone && (
                       <a
-                        href={`/inbox?contact_id=${act.contact_id}`}
+                        href={`https://web.whatsapp.com/send?phone=${act.contact.phone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600/90 text-white hover:bg-emerald-600 transition-colors shadow-sm"
                       >
                         <MessageSquare className="size-3.5" />
-                        Open Chat
+                        WhatsApp ↗
                       </a>
                     )}
 

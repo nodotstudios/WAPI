@@ -81,7 +81,6 @@ function SettingsPageInner() {
     'facebook-ads': <FacebookAdsConfig />,
     'google-calendar': <GoogleCalendarConfig />,
     'data-retention': <DataRetentionSettings />,
-    'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
     members: <MembersTab />,

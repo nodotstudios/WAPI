@@ -626,13 +626,17 @@ export function DealDetailWorkspace({
                         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           Contact Information
                         </h4>
-                        <Link
-                          href="/inbox"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-                        >
-                          <MessageSquare className="size-3.5" />
-                          Open Live WhatsApp Chat
-                        </Link>
+                        {deal.contact?.phone && (
+                          <a
+                            href={`https://web.whatsapp.com/send?phone=${deal.contact.phone.replace(/\D/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                          >
+                            <MessageSquare className="size-3.5" />
+                            Open in WhatsApp Web ↗
+                          </a>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">

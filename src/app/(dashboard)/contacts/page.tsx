@@ -662,6 +662,18 @@ export default function ContactsPage() {
                         align="end"
                         className="bg-popover border-border"
                       >
+                        {contact.phone && (
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`https://web.whatsapp.com/send?phone=${contact.phone.replace(/\D/g, "")}`, "_blank");
+                            }}
+                            className="text-emerald-500 font-medium focus:bg-emerald-500/10 focus:text-emerald-400"
+                          >
+                            <span className="size-4 flex items-center justify-center">💬</span>
+                            Chat in WhatsApp Web ↗
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation();
