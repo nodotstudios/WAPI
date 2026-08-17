@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WAPI CRM Panel</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      background-color: #090d16;
+      color: #f8fafc;
+      font-size: 13px;
+      line-height: 1.4;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 14px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 14px;
+    }
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-badge {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+    .title {
+      font-weight: 700;
+      font-size: 14px;
+      color: #f1f5f9;
+    }
+    .settings-icon {
+      cursor: pointer;
+      color: #94a3b8;
+      background: none;
+      border: none;
+      font-size: 16px;
+    }
+    .settings-icon:hover {
+      color: #f8fafc;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .contact-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #334155;
+      color: #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .contact-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #f8fafc;
+    }
+    .contact-phone {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      margin-top: 10px;
+    }
+    select, input, textarea {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #f8fafc;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      outline: none;
+    }
+    select:focus, input:focus, textarea:focus {
+      border-color: #10b981;
+    }
+    .flex-row {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      width: 100%;
+      padding: 9px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: #10b981;
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background: #059669;
+    }
+    .btn-won {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .btn-won:hover {
+      background: rgba(16, 185, 129, 0.3);
+    }
+    .btn-lost {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .btn-lost:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+    }
+    .timeline-item {
+      padding: 8px;
+      background: #0f172a;
+      border-radius: 8px;
+      border-left: 3px solid #10b981;
+      margin-bottom: 6px;
+      font-size: 11px;
+    }
+    .timeline-title {
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+    .timeline-time {
+      color: #64748b;
+      font-size: 10px;
+    }
+    .config-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      padding: 16px;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-row">
+      <span class="logo-badge">WAPI</span>
+      <span class="title">CRM Side Panel</span>
+    </div>
+    <button id="open-settings-btn" class="settings-icon" title="CRM Settings">⚙️</button>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="config-modal" class="config-modal">
+    <div class="card" style="margin-top: 20px;">
+      <h3 style="margin-bottom: 10px; color: #f8fafc;">Connect WAPI Account</h3>
+      <label>WAPI Domain / URL</label>
+      <input type="text" id="cfg-url" placeholder="https://wapi-blond.vercel.app">
+
+      <label>Team Member API Key</label>
+      <input type="password" id="cfg-apikey" placeholder="wapi_sec_...">
+
+      <div style="margin-top: 14px;" class="flex-row">
+        <button id="save-config-btn" class="btn btn-primary">Save Connection</button>
+        <button id="close-config-btn" class="btn btn-lost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Info Card -->
+  <div class="card">
+    <div class="contact-header">
+      <div class="avatar" id="c-avatar">?</div>
+      <div>
+        <div class="contact-name" id="c-name">No Contact Selected</div>
+        <div class="contact-phone" id="c-phone">Select a chat in WhatsApp Web</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline & Deal Card -->
+  <div class="card" id="deal-card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-weight: 700; color: #f8fafc;" id="deal-title">Deal Pipeline</span>
+      <span class="badge" id="deal-status">OPEN</span>
+    </div>
+
+    <label>Pipeline Stage</label>
+    <select id="stage-select">
+      <option value="">Loading stages...</option>
+    </select>
+
+    <div class="flex-row" style="margin-top: 8px;">
+      <div style="flex: 2;">
+        <label>Deal Value</label>
+        <input type="number" id="deal-value" placeholder="0.00" value="0">
+      </div>
+      <div style="flex: 1;">
+        <label>Currency</label>
+        <select id="deal-currency">
+          <option value="USD">USD</option>
+          <option value="INR">INR</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="AED">AED</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex-row" style="margin-top: 12px;">
+      <button id="btn-save-deal" class="btn btn-primary" style="flex: 2;">Update Deal</button>
+      <button id="btn-mark-won" class="btn btn-won" style="flex: 1.5;" title="Fires Meta CAPI Purchase event to Facebook Ads Manager!">🏆 Mark Won</button>
+    </div>
+  </div>
+
+  <!-- Schedule Follow-up Card -->
+  <div class="card">
+    <span style="font-weight: 700; color: #f8fafc;">⏰ Schedule Follow-up</span>
+
+    <label>Follow-up Channel</label>
+    <select id="fu-channel">
+      <option value="chat">💬 WhatsApp / Chat Follow-up</option>
+      <option value="call">📞 Phone Call Follow-up</option>
+      <option value="meeting">📅 Meeting Follow-up</option>
+    </select>
+
+    <label>Date & Time</label>
+    <input type="datetime-local" id="fu-time">
+
+    <label>Follow-up Notes</label>
+    <input type="text" id="fu-title" placeholder="e.g. Check proposal feedback via Chat">
+
+    <button id="btn-save-followup" class="btn btn-primary" style="margin-top: 10px;">Save Follow-up</button>
+  </div>
+
+  <!-- Timeline & Activities -->
+  <div class="card">
+    <span style="font-weight: 700; color: #f8fafc; margin-bottom: 8px; display: block;">📋 Activity Timeline</span>
+    <div id="timeline-list">
+      <div style="color: #64748b; font-size: 11px;">No activities recorded yet.</div>
+    </div>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>

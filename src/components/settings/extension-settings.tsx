@@ -19,7 +19,7 @@ export function ExtensionSettings() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: `WhatsApp Web Extension Key (${new Date().toLocaleDateString()})`,
-          scopes: ["contacts:read", "contacts:write", "conversations:read", "conversations:write"],
+          scopes: ["contacts:read", "contacts:write", "conversations:read", "messages:send", "messages:read"],
         }),
       });
 
