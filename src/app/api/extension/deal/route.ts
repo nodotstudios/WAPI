@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     if (!targetDealId) {
       if (!contact_id) {
-        return NextResponse.json({ error: "contact_id or deal_id required" }, { status: 400, headers: corsHeaders() });
+        return NextResponse.json({ error: "contact_id is required to create a new offer" }, { status: 400, headers: corsHeaders() });
       }
 
       // Fetch default pipeline for account
@@ -59,13 +59,17 @@ export async function POST(request: Request) {
         .from("pipelines")
         .select("id")
         .eq("account_id", accountId)
+        .order("created_at", { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      let pipelineId = pipeline?.id;
+      const pipelineId = pipeline?.id;
+      if (!pipelineId) {
+        return NextResponse.json({ error: "No pipeline found in workspace" }, { status: 400, headers: corsHeaders() });
+      }
+
       let finalStageId = stage_id;
-
-      if (!finalStageId && pipelineId) {
+      if (!finalStageId) {
         const { data: firstStage } = await supabase
           .from("pipeline_stages")
           .select("id")
@@ -76,22 +80,7 @@ export async function POST(request: Request) {
         finalStageId = firstStage?.id;
       }
 
-      if (!pipelineId || !finalStageId) {
-        // Fallback to any stage in account
-        const { data: anyStage } = await supabase
-          .from("pipeline_stages")
-          .select("id, pipeline_id")
-          .eq("account_id", accountId)
-          .order("position", { ascending: true })
-          .limit(1)
-          .single();
-        if (anyStage) {
-          pipelineId = anyStage.pipeline_id;
-          finalStageId = anyStage.id;
-        }
-      }
-
-      // Create new deal
+      // Create new deal / offer
       const { data: newDeal, error: createErr } = await supabase
         .from("deals")
         .insert({
@@ -99,7 +88,7 @@ export async function POST(request: Request) {
           user_id: finalUserId,
           pipeline_id: pipelineId,
           contact_id: contact_id,
-          title: title || "New Lead via WhatsApp",
+          title: title ? title.trim() : "New Offer / Lead",
           stage_id: finalStageId,
           value: parseFloat(value) || 0,
           currency: currency || "USD",
@@ -114,10 +103,10 @@ export async function POST(request: Request) {
       }
       targetDealId = newDeal.id;
     } else {
-      // Update existing deal
+      // Update existing deal / offer
       const updatePayload: Record<string, any> = {};
       if (stage_id) updatePayload.stage_id = stage_id;
-      if (title) updatePayload.title = title;
+      if (title) updatePayload.title = title.trim();
       if (value !== undefined) updatePayload.value = parseFloat(value) || 0;
       if (currency) updatePayload.currency = currency;
       if (status) updatePayload.status = status;

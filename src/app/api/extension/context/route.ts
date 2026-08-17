@@ -37,30 +37,41 @@ export async function GET(request: Request) {
     const phone = cleanPhone(rawPhone);
     const contactName = rawName.trim() || (phone ? `WhatsApp Contact (${phone.slice(-4)})` : "WhatsApp Contact");
 
-    // Fetch stages in parallel
-    const stagesPromise = supabase
-      .from("pipeline_stages")
-      .select("id, name, color, position")
+    // 1. Fetch default pipeline and stages for account
+    const { data: pipeline } = await supabase
+      .from("pipelines")
+      .select("id, name")
       .eq("account_id", accountId)
-      .order("position", { ascending: true });
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-    // If no contact specified (e.g. extension initially mounted without active chat)
+    let stages: Array<{ id: string; name: string; color: string; position: number }> = [];
+    if (pipeline?.id) {
+      const { data: stagesData } = await supabase
+        .from("pipeline_stages")
+        .select("id, name, color, position")
+        .eq("pipeline_id", pipeline.id)
+        .order("position", { ascending: true });
+      stages = stagesData || [];
+    }
+
+    // If no contact specified (e.g. extension loaded without active chat)
     if (!phone && !rawName) {
-      const { data: stages } = await stagesPromise;
       return NextResponse.json(
         {
           success: true,
           account_id: accountId,
           contact: null,
-          deal: null,
-          stages: stages || [],
+          deals: [],
+          stages: stages,
           activities: [],
         },
         { headers: corsHeaders() }
       );
     }
 
-    // Lookup contact fast
+    // 2. Lookup contact fast
     let contact = null;
     if (phone && phone.length >= 7) {
       const { data: contacts } = await supabase
@@ -96,33 +107,29 @@ export async function GET(request: Request) {
       if (newContact) contact = newContact;
     }
 
-    const [stagesRes, dealsRes] = await Promise.all([
-      stagesPromise,
-      contact
-        ? supabase
-            .from("deals")
-            .select("id, title, value, currency, status, stage_id, created_at, won_at, lost_at")
-            .eq("account_id", accountId)
-            .eq("contact_id", contact.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-        : Promise.resolve({ data: [] }),
-    ]);
-
-    const stages = stagesRes.data || [];
-    let deal = dealsRes.data && dealsRes.data.length > 0 ? dealsRes.data[0] : null;
-
-    // Fetch activities for deal or contact
+    // 3. Fetch ALL deals and activities for this contact in parallel
+    let deals: any[] = [];
     let activities: any[] = [];
-    if (deal) {
-      const { data: acts } = await supabase
-        .from("crm_activities")
-        .select("id, type, title, description, scheduled_at, status, created_at")
-        .eq("account_id", accountId)
-        .eq("deal_id", deal.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      activities = acts || [];
+
+    if (contact) {
+      const [dealsRes, activitiesRes] = await Promise.all([
+        supabase
+          .from("deals")
+          .select("id, title, value, currency, status, stage_id, created_at, won_at, lost_at")
+          .eq("account_id", accountId)
+          .eq("contact_id", contact.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("crm_activities")
+          .select("id, type, title, description, scheduled_at, status, created_at, deal_id")
+          .eq("account_id", accountId)
+          .eq("contact_id", contact.id)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
+
+      deals = dealsRes.data || [];
+      activities = activitiesRes.data || [];
     }
 
     return NextResponse.json(
@@ -130,7 +137,7 @@ export async function GET(request: Request) {
         success: true,
         account_id: accountId,
         contact: contact,
-        deal: deal,
+        deals: deals,
         stages: stages,
         activities: activities,
       },

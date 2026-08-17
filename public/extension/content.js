@@ -10,6 +10,7 @@
   let panelIframe = null;
   let toggleBtn = null;
   let panelVisible = true;
+  let observerDebounce = null;
 
   // Create & Inject Floating Toggle Button
   function injectToggleButton() {
@@ -87,16 +88,18 @@
     );
   }
 
-  // Monitor DOM for conversation switches
+  // Monitor DOM for conversation switches with debouncing
   function observeChatHeader() {
     const observer = new MutationObserver(() => {
-      const contact = extractActiveContact();
-      const currentId = contact.phone || contact.name;
-      if (currentId && currentId !== activePhone) {
-        activePhone = currentId;
-        console.log("[WAPI Extension] Active contact detected:", contact);
-        notifyPanel(contact);
-      }
+      if (observerDebounce) clearTimeout(observerDebounce);
+      observerDebounce = setTimeout(() => {
+        const contact = extractActiveContact();
+        const currentId = contact.phone || contact.name;
+        if (currentId && currentId !== activePhone) {
+          activePhone = currentId;
+          notifyPanel(contact);
+        }
+      }, 150);
     });
 
     observer.observe(document.body, {
@@ -105,7 +108,7 @@
     });
   }
 
-  // Listen for messages from panel (e.g., requests for current contact)
+  // Listen for messages from panel
   window.addEventListener("message", (event) => {
     if (event.data && event.data.type === "WAPI_REQUEST_ACTIVE_PHONE") {
       const contact = extractActiveContact();
@@ -124,7 +127,7 @@
         activePhone = contact.phone || contact.name;
         notifyPanel(contact);
       }
-    }, 2000);
+    }, 1000);
   }
 
   if (document.readyState === "loading") {

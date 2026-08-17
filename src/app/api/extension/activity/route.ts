@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateExtensionRequest } from "@/lib/auth/extension-auth";
+import { createCrmActivity } from "@/lib/crm/activities";
+import { createGoogleCalendarEvent } from "@/lib/google/calendar";
 import { supabaseAdmin } from "@/lib/flows/admin-client";
 
 function corsHeaders() {
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
     }
 
     // Normalize type to valid DB enum values ('call', 'meeting', 'google_meet', 'email', 'note', 'follow_up', 'task', 'stage_change')
-    let normalizedType = "follow_up";
+    let normalizedType: "call" | "meeting" | "google_meet" | "email" | "note" | "follow_up" | "task" | "stage_change" = "follow_up";
     if (type === "call" || type === "call_followup") normalizedType = "call";
     else if (type === "meeting" || type === "meeting_followup") normalizedType = "meeting";
     else if (type === "note") normalizedType = "note";
@@ -64,31 +66,51 @@ export async function POST(request: Request) {
       );
     }
 
-    // Insert CRM activity with all required columns
-    const { data: activity, error: err } = await supabase
-      .from("crm_activities")
-      .insert({
-        account_id: accountId,
-        user_id: finalUserId,
-        deal_id: deal_id || null,
-        contact_id: contact_id || null,
-        type: normalizedType,
-        title: title.trim(),
-        description: description || null,
-        scheduled_at: scheduled_at ? new Date(scheduled_at).toISOString() : new Date().toISOString(),
-        status: "pending",
-      })
-      .select()
-      .single();
+    let googleCalendarEventId: string | null = null;
+    let googleMeetUrl: string | null = null;
 
-    if (err) {
-      console.error("CRM Activity insert error:", err);
-      return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders() });
+    // Trigger Google Calendar event creation if scheduled_at is provided
+    if (scheduled_at) {
+      try {
+        const calRes = await createGoogleCalendarEvent({
+          accountId,
+          userId: finalUserId,
+          title: title.trim(),
+          description: description || undefined,
+          startTime: scheduled_at,
+          durationMinutes: 30,
+          createMeetLink: normalizedType === "meeting",
+        });
+
+        if (calRes) {
+          googleCalendarEventId = calRes.eventId;
+          googleMeetUrl = calRes.meetUrl || calRes.eventUrl || null;
+        }
+      } catch (calErr) {
+        // Google calendar not connected or error, continue gracefully
+      }
     }
+
+    // Insert CRM activity using standard createCrmActivity
+    const activity = await createCrmActivity({
+      accountId,
+      userId: finalUserId,
+      dealId: deal_id || null,
+      contactId: contact_id || null,
+      type: normalizedType,
+      title: title.trim(),
+      description: description || null,
+      scheduledAt: scheduled_at ? new Date(scheduled_at).toISOString() : new Date().toISOString(),
+      status: "pending",
+      nextFollowUpAt: scheduled_at ? new Date(scheduled_at).toISOString() : undefined,
+      googleCalendarEventId,
+      googleMeetUrl,
+    });
 
     return NextResponse.json({
       success: true,
       activity,
+      googleMeetUrl,
     }, { headers: corsHeaders() });
   } catch (err) {
     console.error("Extension Activity API Error:", err);

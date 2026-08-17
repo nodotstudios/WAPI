@@ -86,11 +86,10 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 8px;
     }
     .avatar {
-      width: 36px;
-      height: 36px;
+      width: 38px;
+      height: 38px;
       border-radius: 50%;
       background: #334155;
       color: #10b981;
@@ -99,6 +98,7 @@
       justify-content: center;
       font-weight: 700;
       font-size: 15px;
+      flex-shrink: 0;
     }
     .contact-name {
       font-weight: 600;
@@ -109,6 +109,64 @@
       font-size: 11px;
       color: #94a3b8;
     }
+    .section-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-weight: 700;
+      font-size: 12px;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .btn-create-lead {
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .btn-create-lead:hover {
+      background: #059669;
+    }
+    .offer-card {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 8px;
+      transition: all 0.15s ease;
+    }
+    .offer-card:hover {
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+    .offer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .offer-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: #f8fafc;
+    }
+    .offer-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: #10b981;
+    }
     label {
       display: block;
       font-size: 10px;
@@ -116,16 +174,16 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: #94a3b8;
-      margin-bottom: 4px;
-      margin-top: 10px;
+      margin-bottom: 3px;
+      margin-top: 8px;
     }
     select, input, textarea {
       width: 100%;
-      background: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #090d16;
+      border: 1px solid rgba(255, 255, 255, 0.14);
       color: #f8fafc;
-      padding: 8px 10px;
-      border-radius: 8px;
+      padding: 7px 9px;
+      border-radius: 6px;
       font-size: 12px;
       outline: none;
     }
@@ -134,21 +192,21 @@
     }
     .flex-row {
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
     .btn {
       width: 100%;
-      padding: 10px;
-      border-radius: 8px;
+      padding: 8px;
+      border-radius: 6px;
       font-weight: 600;
-      font-size: 12px;
+      font-size: 11px;
       cursor: pointer;
       border: none;
       transition: all 0.15s ease;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 5px;
     }
     .btn-primary {
       background: #10b981;
@@ -158,21 +216,37 @@
       background: #059669;
     }
     .btn-won {
-      background: rgba(16, 185, 129, 0.2);
+      background: rgba(16, 185, 129, 0.15);
       color: #34d399;
       border: 1px solid rgba(16, 185, 129, 0.4);
     }
     .btn-won:hover {
       background: rgba(16, 185, 129, 0.3);
     }
+    .btn-lost {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .btn-lost:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
     .badge {
       display: inline-block;
-      padding: 3px 8px;
+      padding: 2px 6px;
       border-radius: 9999px;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       background: rgba(59, 130, 246, 0.2);
       color: #60a5fa;
+    }
+    .badge-won {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+    .badge-lost {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
     }
     .timeline-item {
       padding: 8px;
@@ -200,8 +274,13 @@
       margin-top: 10px;
       display: none;
     }
-    .login-container {
-      margin-top: 30px;
+    .new-offer-box {
+      display: none;
+      background: #0f172a;
+      border: 1px dashed #10b981;
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
     }
   </style>
 </head>
@@ -222,8 +301,8 @@
     </div>
   </div>
 
-  <!-- 1. LOGIN VIEW (Shown when user is not signed in) -->
-  <div id="view-login" class="login-container">
+  <!-- 1. LOGIN VIEW -->
+  <div id="view-login" style="margin-top: 30px;">
     <div class="card" style="padding: 16px;">
       <h3 style="color: #f8fafc; font-size: 15px; margin-bottom: 4px;">Sign in to WAPI CRM</h3>
       <p style="color: #94a3b8; font-size: 11px; margin-bottom: 12px;">
@@ -247,7 +326,7 @@
     </div>
   </div>
 
-  <!-- 2. CRM WORKSPACE VIEW (Shown when user is signed in) -->
+  <!-- 2. CRM WORKSPACE VIEW -->
   <div id="view-crm" style="display: none;">
     <!-- Contact Info Card -->
     <div class="card">
@@ -260,64 +339,90 @@
       </div>
     </div>
 
-    <!-- Pipeline & Deal Card -->
-    <div class="card" id="deal-card">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-weight: 700; color: #f8fafc;" id="deal-title">Deal Pipeline</span>
-        <span class="badge" id="deal-status">OPEN</span>
+    <!-- Offers / Deals Section -->
+    <div class="card">
+      <div class="section-title-row">
+        <span class="section-title">Client Offers & Pipeline</span>
+        <button id="btn-toggle-new-offer" class="btn-create-lead" title="Create a new lead/offer for this client">
+          + New Lead / Offer
+        </button>
       </div>
 
-      <label>Pipeline Stage</label>
-      <select id="stage-select">
-        <option value="">Loading stages...</option>
-      </select>
-
-      <div class="flex-row" style="margin-top: 8px;">
-        <div style="flex: 2;">
-          <label>Deal Value</label>
-          <input type="number" id="deal-value" placeholder="0.00" value="0">
+      <!-- New Lead / Offer Creator Form -->
+      <div id="new-offer-box" class="new-offer-box">
+        <div style="font-weight: 700; font-size: 12px; color: #10b981; margin-bottom: 4px;">
+          Create New Lead / Offer
         </div>
-        <div style="flex: 1;">
-          <label>Currency</label>
-          <select id="deal-currency">
-            <option value="USD">USD</option>
-            <option value="INR">INR</option>
-            <option value="EUR">EUR</option>
-            <option value="GBP">GBP</option>
-            <option value="AED">AED</option>
-          </select>
+        <label>Offer / Deal Title</label>
+        <input type="text" id="new-offer-title" placeholder="e.g. Website Redesign Package">
+
+        <div class="flex-row">
+          <div style="flex: 2;">
+            <label>Value</label>
+            <input type="number" id="new-offer-value" placeholder="0.00" value="0">
+          </div>
+          <div style="flex: 1;">
+            <label>Currency</label>
+            <select id="new-offer-currency">
+              <option value="USD">USD</option>
+              <option value="INR">INR</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="AED">AED</option>
+            </select>
+          </div>
+        </div>
+
+        <label>Starting Pipeline Stage</label>
+        <select id="new-offer-stage">
+          <option value="">Select Stage</option>
+        </select>
+
+        <div class="flex-row" style="margin-top: 10px;">
+          <button id="btn-save-new-offer" class="btn btn-primary" style="flex: 2;">Create Offer</button>
+          <button id="btn-cancel-new-offer" class="btn btn-lost" style="flex: 1;">Cancel</button>
         </div>
       </div>
 
-      <div class="flex-row" style="margin-top: 12px;">
-        <button id="btn-save-deal" class="btn btn-primary" style="flex: 2;">Update Deal</button>
-        <button id="btn-mark-won" class="btn btn-won" style="flex: 1.5;" title="Fires Meta CAPI Purchase event to Facebook Ads Manager!">🏆 Mark Won</button>
+      <!-- Active Offers List Container -->
+      <div id="offers-list">
+        <div style="color: #64748b; font-size: 11px; padding: 6px 0;">
+          No active offers for this client. Click <strong>+ New Lead / Offer</strong> above to create one.
+        </div>
       </div>
     </div>
 
     <!-- Schedule Follow-up Card -->
     <div class="card">
-      <span style="font-weight: 700; color: #f8fafc;">⏰ Schedule Follow-up</span>
+      <span class="section-title" style="display: block; margin-bottom: 4px;">⏰ Schedule Follow-up / Activity</span>
 
-      <label>Follow-up Channel</label>
+      <label>Activity Channel</label>
       <select id="fu-channel">
-        <option value="chat">💬 WhatsApp / Chat Follow-up</option>
-        <option value="call">📞 Phone Call Follow-up</option>
-        <option value="meeting">📅 Meeting Follow-up</option>
+        <option value="follow_up">💬 WhatsApp / Chat Follow-up</option>
+        <option value="call">📞 Phone Call</option>
+        <option value="meeting">📅 Meeting (Google Calendar & Meet)</option>
+        <option value="note">📝 Note / Task</option>
+      </select>
+
+      <label>Associated Offer / Deal</label>
+      <select id="fu-deal-select">
+        <option value="">General Client Activity</option>
       </select>
 
       <label>Date & Time</label>
       <input type="datetime-local" id="fu-time">
 
-      <label>Follow-up Notes</label>
-      <input type="text" id="fu-title" placeholder="e.g. Check proposal feedback via Chat">
+      <label>Notes / Description</label>
+      <input type="text" id="fu-title" placeholder="e.g. Proposal review call with client">
 
-      <button id="btn-save-followup" class="btn btn-primary" style="margin-top: 10px;">Save Follow-up</button>
+      <button id="btn-save-followup" class="btn btn-primary" style="margin-top: 10px;">
+        Save Activity to CRM & Calendar
+      </button>
     </div>
 
     <!-- Timeline & Activities -->
     <div class="card">
-      <span style="font-weight: 700; color: #f8fafc; margin-bottom: 8px; display: block;">📋 Activity Timeline</span>
+      <span class="section-title" style="display: block; margin-bottom: 8px;">📋 Activity Timeline</span>
       <div id="timeline-list">
         <div style="color: #64748b; font-size: 11px;">No activities recorded yet.</div>
       </div>
