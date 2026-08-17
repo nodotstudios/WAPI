@@ -1,6 +1,6 @@
 /**
  * WAPI Extension Side-Panel Controller
- * Native Email & Password Session Auth + Multi-Offer Sales CRM
+ * Ultra-Fast Direct Sync + In-Memory Caching + Multi-Offer Sales CRM
  */
 
 let serverUrl = "https://wapi-blond.vercel.app";
@@ -13,6 +13,9 @@ let currentContact = null;
 let currentDeals = [];
 let stagesList = [];
 let fetchAbortController = null;
+
+// High-speed In-Memory Client Cache (phone/name -> { contact, deals, activities, timestamp })
+const contactCache = new Map();
 
 // DOM Elements - Auth & Views
 const viewLogin = document.getElementById("view-login");
@@ -79,10 +82,13 @@ function renderView(isLoggedIn) {
 // Load stored session on startup
 function initSession() {
   if (chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(["wapiAuthToken", "wapiUser", "wapiServerUrl"], (items) => {
+    chrome.storage.local.get(["wapiAuthToken", "wapiUser", "wapiServerUrl", "wapiStages"], (items) => {
       if (items.wapiServerUrl) {
         serverUrl = items.wapiServerUrl.replace(/\/$/, "");
         loginUrlInput.value = serverUrl;
+      }
+      if (items.wapiStages && Array.isArray(items.wapiStages)) {
+        stagesList = items.wapiStages;
       }
       if (items.wapiAuthToken && items.wapiUser) {
         authToken = items.wapiAuthToken;
@@ -158,6 +164,7 @@ btnLogout.addEventListener("click", () => {
   currentUser = null;
   currentContact = null;
   currentDeals = [];
+  contactCache.clear();
 
   if (chrome.storage && chrome.storage.local) {
     chrome.storage.local.remove(["wapiAuthToken", "wapiUser"]);
@@ -217,8 +224,12 @@ btnSaveNewOffer.addEventListener("click", async () => {
     newOfferTitle.value = "";
     newOfferValue.value = "0";
 
+    // Invalidate local cache for this contact
+    const cacheKey = currentPhone || currentName;
+    if (cacheKey) contactCache.delete(cacheKey);
+
     // Refresh context immediately
-    await fetchCrmContext(currentPhone, currentName);
+    await fetchCrmContext(currentPhone, currentName, false);
   } catch (err) {
     alert("Error creating offer: " + err.message);
   } finally {
@@ -227,26 +238,38 @@ btnSaveNewOffer.addEventListener("click", async () => {
   }
 });
 
-// Fetch CRM Context for Active Contact
-async function fetchCrmContext(phone, name) {
+// Fetch CRM Context for Active Contact with Fast Memory Caching
+async function fetchCrmContext(phone, name, allowCached = true) {
   currentPhone = phone || "";
   currentName = name || "";
 
   if (!authToken) return;
 
-  // Render optimistic name & phone instantly
-  if (currentName || currentPhone) {
-    cName.textContent = currentName || `Contact (${currentPhone.slice(-4)})`;
-    cPhone.textContent = currentPhone || "Syncing...";
-    cAvatar.textContent = (currentName || currentPhone || "C").charAt(0).toUpperCase();
+  const cacheKey = currentPhone || currentName;
 
-    // Immediately clear previous offers to prevent showing stale client data
-    offersList.innerHTML = `
-      <div style="color: #94a3b8; font-size: 11px; padding: 12px 0; text-align: center;">
-        <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 4px;">⚡</span>
-        Syncing client offers...
-      </div>
-    `;
+  // 1. Instant Render from In-Memory Cache (0ms)
+  if (allowCached && cacheKey && contactCache.has(cacheKey)) {
+    const cached = contactCache.get(cacheKey);
+    currentContact = cached.contact;
+    currentDeals = cached.deals || [];
+    renderContactHeader(cached.contact, currentName, currentPhone);
+    renderOffers(currentDeals);
+    renderTimeline(cached.activities || []);
+    populateStageAndDealSelectors();
+  } else {
+    // Render optimistic name & phone instantly
+    if (currentName || currentPhone) {
+      cName.textContent = currentName || `Contact (${currentPhone.slice(-4)})`;
+      cPhone.textContent = currentPhone || "Syncing...";
+      cAvatar.textContent = (currentName || currentPhone || "C").charAt(0).toUpperCase();
+
+      offersList.innerHTML = `
+        <div style="color: #94a3b8; font-size: 11px; padding: 10px 0; text-align: center;">
+          <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 4px;">⚡</span>
+          Syncing offers...
+        </div>
+      `;
+    }
   }
 
   if (fetchAbortController) {
@@ -281,29 +304,28 @@ async function fetchCrmContext(phone, name) {
     const data = await res.json();
     currentContact = data.contact;
     currentDeals = data.deals || [];
-    stagesList = data.stages || [];
-
-    // Render Contact Header
-    if (currentContact) {
-      cName.textContent = currentContact.name || currentName || `Contact (${(currentContact.phone || "").slice(-4)})`;
-      cPhone.textContent = currentContact.phone || currentPhone || "";
-      cAvatar.textContent = (cName.textContent || "C").charAt(0).toUpperCase();
-    } else {
-      cName.textContent = currentName || "Select a Chat";
-      cPhone.textContent = currentPhone || "Click any conversation in WhatsApp Web";
-      cAvatar.textContent = "?";
+    if (data.stages && data.stages.length > 0) {
+      stagesList = data.stages;
+      if (chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ wapiStages: stagesList });
+      }
     }
 
-    // Populate New Offer Stage Dropdown
-    newOfferStage.innerHTML = stagesList
-      .map((s) => `<option value="${s.id}">${s.name}</option>`)
-      .join("");
+    // Save to fast in-memory cache
+    if (cacheKey) {
+      contactCache.set(cacheKey, {
+        contact: currentContact,
+        deals: currentDeals,
+        activities: data.activities || [],
+        timestamp: Date.now(),
+      });
+    }
 
-    // Populate Follow-up Deal selector
-    fuDealSelect.innerHTML = `<option value="">General Client Activity</option>` +
-      currentDeals
-        .map((d) => `<option value="${d.id}">${d.title || "Offer"} (${d.currency || "$"}${d.value || 0})</option>`)
-        .join("");
+    // Render Contact Header
+    renderContactHeader(currentContact, currentName, currentPhone);
+
+    // Populate selectors
+    populateStageAndDealSelectors();
 
     // Render Offers List
     renderOffers(currentDeals);
@@ -316,7 +338,34 @@ async function fetchCrmContext(phone, name) {
   }
 }
 
-// Render All Client Offers / Deals
+function renderContactHeader(contact, fallbackName, fallbackPhone) {
+  if (contact) {
+    cName.textContent = contact.name || fallbackName || `Contact (${(contact.phone || "").slice(-4)})`;
+    cPhone.textContent = contact.phone || fallbackPhone || "";
+    cAvatar.textContent = (cName.textContent || "C").charAt(0).toUpperCase();
+  } else {
+    cName.textContent = fallbackName || "Select a Chat";
+    cPhone.textContent = fallbackPhone || "Click any conversation in WhatsApp Web";
+    cAvatar.textContent = "?";
+  }
+}
+
+function populateStageAndDealSelectors() {
+  // Populate New Offer Stage Dropdown
+  if (stagesList && stagesList.length > 0) {
+    newOfferStage.innerHTML = stagesList
+      .map((s) => `<option value="${s.id}">${s.name}</option>`)
+      .join("");
+  }
+
+  // Populate Follow-up Deal selector
+  fuDealSelect.innerHTML = `<option value="">General Client Activity</option>` +
+    currentDeals
+      .map((d) => `<option value="${d.id}">${d.title || "Offer"} (${d.currency || "$"}${d.value || 0})</option>`)
+      .join("");
+}
+
+// Render All Client Offers / Deals with Delete Button
 function renderOffers(deals) {
   if (!deals || deals.length === 0) {
     offersList.innerHTML = `
@@ -340,10 +389,15 @@ function renderOffers(deals) {
         .join("");
 
       return `
-        <div class="offer-card" data-deal-id="${deal.id}">
+        <div class="offer-card" id="offer-card-${deal.id}" data-deal-id="${deal.id}">
           <div class="offer-header">
             <span class="offer-title">${deal.title || "Offer / Deal"}</span>
-            <span class="${badgeClass}">${(deal.status || "OPEN").toUpperCase()}</span>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span class="${badgeClass}">${(deal.status || "OPEN").toUpperCase()}</span>
+              <button class="btn btn-delete btn-delete-offer" data-deal-id="${deal.id}" title="Delete offer">
+                🗑️
+              </button>
+            </div>
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -369,7 +423,7 @@ function renderOffers(deals) {
     })
     .join("");
 
-  // Attach Stage Change listeners to each offer
+  // Attach Stage Change listeners
   document.querySelectorAll(".deal-stage-select").forEach((select) => {
     select.addEventListener("change", async (e) => {
       const dealId = e.target.getAttribute("data-deal-id");
@@ -395,10 +449,58 @@ function renderOffers(deals) {
       await updateDealStatus(dealId, "lost");
     });
   });
+
+  // Attach Delete Offer listeners
+  document.querySelectorAll(".btn-delete-offer").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const dealId = btn.getAttribute("data-deal-id");
+      if (!confirm("Are you sure you want to delete this offer?")) return;
+      await deleteDeal(dealId);
+    });
+  });
+}
+
+// Delete Offer from CRM and UI (0ms Optimistic Removal)
+async function deleteDeal(dealId) {
+  // 1. Optimistically remove from DOM
+  const card = document.getElementById(`offer-card-${dealId}`);
+  if (card) card.remove();
+
+  // 2. Remove from local memory cache
+  const cacheKey = currentPhone || currentName;
+  if (cacheKey && contactCache.has(cacheKey)) {
+    const cached = contactCache.get(cacheKey);
+    cached.deals = (cached.deals || []).filter((d) => d.id !== dealId);
+  }
+
+  currentDeals = currentDeals.filter((d) => d.id !== dealId);
+  populateStageAndDealSelectors();
+
+  if (currentDeals.length === 0) {
+    renderOffers([]);
+  }
+
+  // 3. Send delete request to backend
+  try {
+    await fetch(`${serverUrl}/api/extension/deal`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        deal_id: dealId,
+        action: "delete",
+      }),
+    });
+  } catch (err) {
+    console.error("Failed to delete deal on server:", err);
+  }
 }
 
 // Update Stage of a specific offer
 async function updateDealStage(dealId, stageId) {
+  // Invalidate local cache
+  const cacheKey = currentPhone || currentName;
+  if (cacheKey) contactCache.delete(cacheKey);
+
   try {
     const res = await fetch(`${serverUrl}/api/extension/deal`, {
       method: "POST",
@@ -409,7 +511,7 @@ async function updateDealStage(dealId, stageId) {
       }),
     });
     if (res.ok) {
-      await fetchCrmContext(currentPhone, currentName);
+      await fetchCrmContext(currentPhone, currentName, false);
     }
   } catch (err) {
     console.error("Failed to update deal stage:", err);
@@ -418,6 +520,10 @@ async function updateDealStage(dealId, stageId) {
 
 // Update Status (Won / Lost) of a specific offer (Triggers Meta CAPI!)
 async function updateDealStatus(dealId, status) {
+  // Invalidate local cache
+  const cacheKey = currentPhone || currentName;
+  if (cacheKey) contactCache.delete(cacheKey);
+
   try {
     const res = await fetch(`${serverUrl}/api/extension/deal`, {
       method: "POST",
@@ -428,7 +534,7 @@ async function updateDealStatus(dealId, status) {
       }),
     });
     if (res.ok) {
-      await fetchCrmContext(currentPhone, currentName);
+      await fetchCrmContext(currentPhone, currentName, false);
     }
   } catch (err) {
     console.error("Failed to update deal status:", err);
@@ -484,7 +590,11 @@ btnSaveFollowup.addEventListener("click", async () => {
       btnSaveFollowup.textContent = "Saved to CRM & Calendar ✓";
       fuTitle.value = "";
       setTimeout(() => (btnSaveFollowup.textContent = "Save Activity to CRM & Calendar"), 2000);
-      fetchCrmContext(currentPhone, currentName);
+
+      // Invalidate cache and reload
+      const cacheKey = currentPhone || currentName;
+      if (cacheKey) contactCache.delete(cacheKey);
+      fetchCrmContext(currentPhone, currentName, false);
     } else {
       btnSaveFollowup.textContent = "Failed ❌";
       setTimeout(() => (btnSaveFollowup.textContent = "Save Activity to CRM & Calendar"), 2000);
@@ -500,7 +610,7 @@ btnSaveFollowup.addEventListener("click", async () => {
 // Listen for contact change events from content script
 window.addEventListener("message", (event) => {
   if (event.data && event.data.type === "WAPI_CONTACT_CHANGED") {
-    fetchCrmContext(event.data.phone, event.data.name);
+    fetchCrmContext(event.data.phone, event.data.name, true);
   }
 });
 

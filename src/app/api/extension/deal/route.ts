@@ -6,13 +6,41 @@ import { sendMetaConversionEvent } from "@/lib/meta/conversions-api";
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
   };
 }
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const authCtx = await authenticateExtensionRequest(request);
+    if (!authCtx) {
+      return NextResponse.json(
+        { error: "Unauthorized." },
+        { status: 401, headers: corsHeaders() }
+      );
+    }
+    const { accountId } = authCtx;
+    const url = new URL(request.url);
+    const dealId = url.searchParams.get("deal_id");
+    if (!dealId) {
+      return NextResponse.json({ error: "deal_id required" }, { status: 400, headers: corsHeaders() });
+    }
+
+    await supabaseAdmin()
+      .from("deals")
+      .delete()
+      .eq("id", dealId)
+      .eq("account_id", accountId);
+
+    return NextResponse.json({ success: true, deleted: true }, { headers: corsHeaders() });
+  } catch (err) {
+    return NextResponse.json({ error: "Failed to delete deal" }, { status: 500, headers: corsHeaders() });
+  }
 }
 
 export async function POST(request: Request) {
@@ -33,7 +61,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders() });
     }
 
-    const { deal_id, contact_id, stage_id, title, value, currency, status, won_reason, lost_reason } = body;
+    const { deal_id, contact_id, stage_id, title, value, currency, status, won_reason, lost_reason, action } = body;
+
+    // Handle delete action via POST
+    if (action === "delete" && deal_id) {
+      await supabase
+        .from("deals")
+        .delete()
+        .eq("id", deal_id)
+        .eq("account_id", accountId);
+
+      return NextResponse.json({ success: true, deleted: true }, { headers: corsHeaders() });
+    }
 
     let targetDealId = deal_id;
 
