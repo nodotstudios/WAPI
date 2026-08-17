@@ -47,15 +47,33 @@
       font-size: 14px;
       color: #f1f5f9;
     }
-    .settings-icon {
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 4px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+    }
+    .user-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .logout-btn {
       cursor: pointer;
       color: #94a3b8;
       background: none;
       border: none;
-      font-size: 16px;
+      font-size: 11px;
+      text-decoration: underline;
+      margin-left: 4px;
     }
-    .settings-icon:hover {
-      color: #f8fafc;
+    .logout-btn:hover {
+      color: #f87171;
     }
     .card {
       background: #1e293b;
@@ -71,8 +89,8 @@
       margin-bottom: 8px;
     }
     .avatar {
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       background: #334155;
       color: #10b981;
@@ -80,7 +98,7 @@
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 14px;
+      font-size: 15px;
     }
     .contact-name {
       font-weight: 600;
@@ -120,7 +138,7 @@
     }
     .btn {
       width: 100%;
-      padding: 9px;
+      padding: 10px;
       border-radius: 8px;
       font-weight: 600;
       font-size: 12px;
@@ -147,14 +165,6 @@
     .btn-won:hover {
       background: rgba(16, 185, 129, 0.3);
     }
-    .btn-lost {
-      background: rgba(239, 68, 68, 0.2);
-      color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.4);
-    }
-    .btn-lost:hover {
-      background: rgba(239, 68, 68, 0.3);
-    }
     .badge {
       display: inline-block;
       padding: 3px 8px;
@@ -180,115 +190,137 @@
       color: #64748b;
       font-size: 10px;
     }
-    .config-modal {
+    .error-box {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      margin-top: 10px;
       display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.85);
-      padding: 16px;
-      z-index: 100;
+    }
+    .login-container {
+      margin-top: 30px;
     }
   </style>
 </head>
 <body>
 
-  <!-- Header -->
+  <!-- Top App Header -->
   <div class="header">
     <div class="logo-row">
       <span class="logo-badge">WAPI</span>
       <span class="title">CRM Side Panel</span>
     </div>
-    <button id="open-settings-btn" class="settings-icon" title="CRM Settings">⚙️</button>
-  </div>
-
-  <!-- Settings Modal -->
-  <div id="config-modal" class="config-modal">
-    <div class="card" style="margin-top: 20px;">
-      <h3 style="margin-bottom: 10px; color: #f8fafc;">Connect WAPI Account</h3>
-      <label>WAPI Domain / URL</label>
-      <input type="text" id="cfg-url" placeholder="https://wapi-blond.vercel.app">
-
-      <label>Team Member API Key</label>
-      <input type="password" id="cfg-apikey" placeholder="wapi_sec_...">
-
-      <div style="margin-top: 14px;" class="flex-row">
-        <button id="save-config-btn" class="btn btn-primary">Save Connection</button>
-        <button id="close-config-btn" class="btn btn-lost">Close</button>
+    <div id="auth-status-container" style="display: none;">
+      <div class="user-pill">
+        <div class="user-dot"></div>
+        <span id="user-display-name">Logged In</span>
+        <button id="btn-logout" class="logout-btn" title="Sign out">Log out</button>
       </div>
     </div>
   </div>
 
-  <!-- Contact Info Card -->
-  <div class="card">
-    <div class="contact-header">
-      <div class="avatar" id="c-avatar">?</div>
-      <div>
-        <div class="contact-name" id="c-name">No Contact Selected</div>
-        <div class="contact-phone" id="c-phone">Select a chat in WhatsApp Web</div>
-      </div>
+  <!-- 1. LOGIN VIEW (Shown when user is not signed in) -->
+  <div id="view-login" class="login-container">
+    <div class="card" style="padding: 16px;">
+      <h3 style="color: #f8fafc; font-size: 15px; margin-bottom: 4px;">Sign in to WAPI CRM</h3>
+      <p style="color: #94a3b8; font-size: 11px; margin-bottom: 12px;">
+        Use your WAPI email and password to connect your WhatsApp Web CRM.
+      </p>
+
+      <label>Server URL</label>
+      <input type="text" id="login-url" value="https://wapi-blond.vercel.app">
+
+      <label>Email Address</label>
+      <input type="email" id="login-email" placeholder="name@company.com">
+
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••">
+
+      <div id="login-error" class="error-box"></div>
+
+      <button id="btn-login" class="btn btn-primary" style="margin-top: 14px;">
+        Sign In to WAPI
+      </button>
     </div>
   </div>
 
-  <!-- Pipeline & Deal Card -->
-  <div class="card" id="deal-card">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span style="font-weight: 700; color: #f8fafc;" id="deal-title">Deal Pipeline</span>
-      <span class="badge" id="deal-status">OPEN</span>
-    </div>
-
-    <label>Pipeline Stage</label>
-    <select id="stage-select">
-      <option value="">Loading stages...</option>
-    </select>
-
-    <div class="flex-row" style="margin-top: 8px;">
-      <div style="flex: 2;">
-        <label>Deal Value</label>
-        <input type="number" id="deal-value" placeholder="0.00" value="0">
-      </div>
-      <div style="flex: 1;">
-        <label>Currency</label>
-        <select id="deal-currency">
-          <option value="USD">USD</option>
-          <option value="INR">INR</option>
-          <option value="EUR">EUR</option>
-          <option value="GBP">GBP</option>
-          <option value="AED">AED</option>
-        </select>
+  <!-- 2. CRM WORKSPACE VIEW (Shown when user is signed in) -->
+  <div id="view-crm" style="display: none;">
+    <!-- Contact Info Card -->
+    <div class="card">
+      <div class="contact-header">
+        <div class="avatar" id="c-avatar">?</div>
+        <div>
+          <div class="contact-name" id="c-name">Select a Chat</div>
+          <div class="contact-phone" id="c-phone">Click any chat in WhatsApp Web</div>
+        </div>
       </div>
     </div>
 
-    <div class="flex-row" style="margin-top: 12px;">
-      <button id="btn-save-deal" class="btn btn-primary" style="flex: 2;">Update Deal</button>
-      <button id="btn-mark-won" class="btn btn-won" style="flex: 1.5;" title="Fires Meta CAPI Purchase event to Facebook Ads Manager!">🏆 Mark Won</button>
+    <!-- Pipeline & Deal Card -->
+    <div class="card" id="deal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-weight: 700; color: #f8fafc;" id="deal-title">Deal Pipeline</span>
+        <span class="badge" id="deal-status">OPEN</span>
+      </div>
+
+      <label>Pipeline Stage</label>
+      <select id="stage-select">
+        <option value="">Loading stages...</option>
+      </select>
+
+      <div class="flex-row" style="margin-top: 8px;">
+        <div style="flex: 2;">
+          <label>Deal Value</label>
+          <input type="number" id="deal-value" placeholder="0.00" value="0">
+        </div>
+        <div style="flex: 1;">
+          <label>Currency</label>
+          <select id="deal-currency">
+            <option value="USD">USD</option>
+            <option value="INR">INR</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="AED">AED</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex-row" style="margin-top: 12px;">
+        <button id="btn-save-deal" class="btn btn-primary" style="flex: 2;">Update Deal</button>
+        <button id="btn-mark-won" class="btn btn-won" style="flex: 1.5;" title="Fires Meta CAPI Purchase event to Facebook Ads Manager!">🏆 Mark Won</button>
+      </div>
     </div>
-  </div>
 
-  <!-- Schedule Follow-up Card -->
-  <div class="card">
-    <span style="font-weight: 700; color: #f8fafc;">⏰ Schedule Follow-up</span>
+    <!-- Schedule Follow-up Card -->
+    <div class="card">
+      <span style="font-weight: 700; color: #f8fafc;">⏰ Schedule Follow-up</span>
 
-    <label>Follow-up Channel</label>
-    <select id="fu-channel">
-      <option value="chat">💬 WhatsApp / Chat Follow-up</option>
-      <option value="call">📞 Phone Call Follow-up</option>
-      <option value="meeting">📅 Meeting Follow-up</option>
-    </select>
+      <label>Follow-up Channel</label>
+      <select id="fu-channel">
+        <option value="chat">💬 WhatsApp / Chat Follow-up</option>
+        <option value="call">📞 Phone Call Follow-up</option>
+        <option value="meeting">📅 Meeting Follow-up</option>
+      </select>
 
-    <label>Date & Time</label>
-    <input type="datetime-local" id="fu-time">
+      <label>Date & Time</label>
+      <input type="datetime-local" id="fu-time">
 
-    <label>Follow-up Notes</label>
-    <input type="text" id="fu-title" placeholder="e.g. Check proposal feedback via Chat">
+      <label>Follow-up Notes</label>
+      <input type="text" id="fu-title" placeholder="e.g. Check proposal feedback via Chat">
 
-    <button id="btn-save-followup" class="btn btn-primary" style="margin-top: 10px;">Save Follow-up</button>
-  </div>
+      <button id="btn-save-followup" class="btn btn-primary" style="margin-top: 10px;">Save Follow-up</button>
+    </div>
 
-  <!-- Timeline & Activities -->
-  <div class="card">
-    <span style="font-weight: 700; color: #f8fafc; margin-bottom: 8px; display: block;">📋 Activity Timeline</span>
-    <div id="timeline-list">
-      <div style="color: #64748b; font-size: 11px;">No activities recorded yet.</div>
+    <!-- Timeline & Activities -->
+    <div class="card">
+      <span style="font-weight: 700; color: #f8fafc; margin-bottom: 8px; display: block;">📋 Activity Timeline</span>
+      <div id="timeline-list">
+        <div style="color: #64748b; font-size: 11px;">No activities recorded yet.</div>
+      </div>
     </div>
   </div>
 

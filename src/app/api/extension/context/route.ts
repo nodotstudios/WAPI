@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireApiKey } from "@/lib/auth/api-context";
-import { createClient } from "@/lib/supabase/server";
+import { authenticateExtensionRequest } from "@/lib/auth/extension-auth";
+import { supabaseAdmin } from "@/lib/flows/admin-client";
 
 function cleanPhone(raw: string): string {
   return raw.replace(/\D/g, "");
@@ -20,51 +20,22 @@ export async function OPTIONS() {
 
 export async function GET(request: Request) {
   try {
+    const authCtx = await authenticateExtensionRequest(request);
+    if (!authCtx) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in to your WAPI account." },
+        { status: 401, headers: corsHeaders() }
+      );
+    }
+
+    const { accountId, userId } = authCtx;
+    const supabase = supabaseAdmin();
+
     const url = new URL(request.url);
     const rawPhone = url.searchParams.get("phone") || "";
     const rawName = url.searchParams.get("name") || "";
     const phone = cleanPhone(rawPhone);
     const contactName = rawName.trim() || (phone ? `WhatsApp Contact (${phone.slice(-4)})` : "WhatsApp Contact");
-
-    // Authenticate via API key or session
-    let accountId: string | null = null;
-    let userId: string | null = null;
-    let supabase = await createClient();
-
-    try {
-      const apiKeyCtx = await requireApiKey(request);
-      accountId = apiKeyCtx.accountId;
-      supabase = apiKeyCtx.supabase;
-      userId = apiKeyCtx.createdBy;
-    } catch {
-      // Fallback to active Auth Session if logged in via web browser session
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401, headers: corsHeaders() });
-      }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("account_id")
-        .eq("id", user.id)
-        .single();
-      if (!profile) {
-        return NextResponse.json({ error: "Account not found" }, { status: 404, headers: corsHeaders() });
-      }
-      accountId = profile.account_id;
-      userId = user.id;
-    }
-
-    if (!accountId) {
-      return NextResponse.json({ error: "Account ID not found" }, { status: 404, headers: corsHeaders() });
-    }
-
-    // Update presence for team member using extension
-    if (userId) {
-      void supabase
-        .from("profiles")
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq("id", userId);
-    }
 
     // Fetch active pipeline stages for account
     const { data: stages } = await supabase

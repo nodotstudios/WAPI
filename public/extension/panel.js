@@ -87,27 +87,34 @@ function getHeaders() {
   return headers;
 }
 
-// Fetch CRM context for active contact
-async function fetchCrmContext(phone) {
-  if (!phone) return;
-  currentPhone = phone;
+let currentName = null;
 
-  cName.textContent = "Loading CRM...";
-  cPhone.textContent = phone;
+// Fetch CRM context for active contact
+async function fetchCrmContext(phone, name) {
+  currentPhone = phone || "";
+  currentName = name || "";
+
+  cName.textContent = currentName || "Loading CRM...";
+  cPhone.textContent = currentPhone || "Fetching contact data...";
 
   try {
-    const res = await fetch(`${serverUrl}/api/extension/context?phone=${encodeURIComponent(phone)}`, {
+    const params = new URLSearchParams();
+    if (currentPhone) params.set("phone", currentPhone);
+    if (currentName) params.set("name", currentName);
+
+    const res = await fetch(`${serverUrl}/api/extension/context?${params.toString()}`, {
       headers: getHeaders(),
     });
 
     if (!res.ok) {
       if (res.status === 401) {
-        cName.textContent = "API Key Required";
-        cPhone.textContent = "Click ⚙️ to enter WAPI API key";
+        cName.textContent = "Key Expired / Invalid";
+        cPhone.textContent = "Click ⚙️ to enter new WAPI Team Key";
         cfgModal.style.display = "block";
         return;
       }
-      throw new Error(`HTTP ${res.status}`);
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
     }
 
     const data = await res.json();
@@ -116,9 +123,15 @@ async function fetchCrmContext(phone) {
     stagesList = data.stages || [];
 
     // Render Contact Info
-    cName.textContent = currentContact?.name || `Contact (${phone.slice(-4)})`;
-    cPhone.textContent = currentContact?.phone || phone;
-    cAvatar.textContent = (currentContact?.name || phone).charAt(0).toUpperCase();
+    if (currentContact) {
+      cName.textContent = currentContact.name || currentName || `Contact (${(currentContact.phone || "").slice(-4)})`;
+      cPhone.textContent = currentContact.phone || currentPhone || "";
+      cAvatar.textContent = (cName.textContent || "C").charAt(0).toUpperCase();
+    } else {
+      cName.textContent = currentName || "Select a Chat";
+      cPhone.textContent = currentPhone || "No active conversation selected";
+      cAvatar.textContent = "?";
+    }
 
     // Render Stage Options
     stageSelect.innerHTML = stagesList
@@ -134,7 +147,7 @@ async function fetchCrmContext(phone) {
       dealValueInput.value = currentDeal.value || 0;
       dealCurrencySelect.value = currentDeal.currency || "USD";
     } else {
-      dealTitle.textContent = "No Active Deal (Click to Create)";
+      dealTitle.textContent = currentContact ? "No Active Deal (Click to Create)" : "Pipeline Ready";
       dealStatus.textContent = "NEW";
       dealValueInput.value = 0;
     }
@@ -144,7 +157,7 @@ async function fetchCrmContext(phone) {
   } catch (err) {
     console.error("[WAPI Extension] Fetch context error:", err);
     cName.textContent = "Connection Error";
-    cPhone.textContent = "Check WAPI URL & API key in settings";
+    cPhone.textContent = err.message || "Check WAPI URL & API key in settings";
   }
 }
 
@@ -273,12 +286,13 @@ btnSaveFollowup.addEventListener("click", async () => {
 // Listen for contact change events from content script
 window.addEventListener("message", (event) => {
   if (event.data && event.data.type === "WAPI_CONTACT_CHANGED") {
-    if (event.data.phone) {
-      fetchCrmContext(event.data.phone);
-    }
+    fetchCrmContext(event.data.phone, event.data.name);
   }
 });
 
 // Init
 loadSettings();
-window.parent.postMessage({ type: "WAPI_REQUEST_ACTIVE_PHONE" }, "*");
+setTimeout(() => {
+  fetchCrmContext("", "");
+  window.parent.postMessage({ type: "WAPI_REQUEST_ACTIVE_PHONE" }, "*");
+}, 200);

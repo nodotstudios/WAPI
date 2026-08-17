@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireApiKey } from "@/lib/auth/api-context";
-import { createClient } from "@/lib/supabase/server";
+import { authenticateExtensionRequest } from "@/lib/auth/extension-auth";
+import { supabaseAdmin } from "@/lib/flows/admin-client";
 
 function corsHeaders() {
   return {
@@ -16,32 +16,16 @@ export async function OPTIONS() {
 
 export async function POST(request: Request) {
   try {
-    let accountId: string | null = null;
-    let supabase = await createClient();
-
-    try {
-      const apiKeyCtx = await requireApiKey(request);
-      accountId = apiKeyCtx.accountId;
-      supabase = apiKeyCtx.supabase;
-    } catch {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401, headers: corsHeaders() });
-      }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("account_id")
-        .eq("id", user.id)
-        .single();
-      if (!profile) {
-        return NextResponse.json({ error: "Account not found" }, { status: 404, headers: corsHeaders() });
-      }
-      accountId = profile.account_id;
+    const authCtx = await authenticateExtensionRequest(request);
+    if (!authCtx) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in to your WAPI account." },
+        { status: 401, headers: corsHeaders() }
+      );
     }
 
-    if (!accountId) {
-      return NextResponse.json({ error: "Account ID not found" }, { status: 404, headers: corsHeaders() });
-    }
+    const { accountId } = authCtx;
+    const supabase = supabaseAdmin();
 
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {

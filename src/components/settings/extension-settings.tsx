@@ -1,9 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PlugZap, Download, KeyRound, Check, Copy, ShieldCheck, Trash2, UserCheck, Circle } from "lucide-react";
+import {
+  PlugZap,
+  Download,
+  ShieldCheck,
+  UsersRound,
+  Circle,
+  LogIn,
+  CheckCircle2,
+  ExternalLink,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 interface TeamMember {
@@ -14,40 +22,9 @@ interface TeamMember {
   last_seen_at?: string;
 }
 
-interface ApiKeyRow {
-  id: string;
-  name: string;
-  key_prefix: string;
-  created_at: string;
-  revoked_at?: string | null;
-  last_used_at?: string | null;
-}
-
 export function ExtensionSettings() {
-  const [generating, setGenerating] = useState(false);
-  const [createdKey, setCreatedKey] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [existingKeys, setExistingKeys] = useState<ApiKeyRow[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [selectedMember, setSelectedMember] = useState<string>("");
-  const [revokingId, setRevokingId] = useState<string | null>(null);
-  const [loadingKeys, setLoadingKeys] = useState(true);
-
-  const loadKeys = async () => {
-    try {
-      const res = await fetch("/api/account/api-keys", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.keys)) {
-          setExistingKeys(data.keys.filter((k: ApiKeyRow) => !k.revoked_at));
-        }
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoadingKeys(false);
-    }
-  };
+  const [loadingMembers, setLoadingMembers] = useState(true);
 
   const loadMembers = async () => {
     try {
@@ -60,72 +37,14 @@ export function ExtensionSettings() {
       }
     } catch {
       // ignore
+    } finally {
+      setLoadingMembers(false);
     }
   };
 
   useEffect(() => {
-    loadKeys();
     loadMembers();
   }, []);
-
-  const handleGenerateKey = async () => {
-    setGenerating(true);
-    try {
-      const targetMember = members.find((m) => m.user_id === selectedMember);
-      const memberName = targetMember?.full_name || targetMember?.email || "Team Member";
-
-      const res = await fetch("/api/account/api-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `WhatsApp Extension Key (${memberName})`,
-          scopes: ["contacts:read", "contacts:write", "conversations:read", "messages:send", "messages:read"],
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "Failed to generate API Key");
-        return;
-      }
-
-      const keyString = typeof data.plaintext === "string" ? data.plaintext : "";
-      setCreatedKey(keyString);
-      toast.success(`Extension API key created for ${memberName}!`);
-      loadKeys();
-    } catch {
-      toast.error("Failed to generate API Key");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleRevokeKey = async (id: string) => {
-    if (!confirm("Are you sure you want to revoke and remove this API key?")) return;
-    setRevokingId(id);
-    try {
-      const res = await fetch(`/api/account/api-keys/${id}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        toast.success("API Key revoked and removed!");
-        setExistingKeys((prev) => prev.filter((k) => k.id !== id));
-      } else {
-        toast.error("Failed to revoke key");
-      }
-    } catch {
-      toast.error("Failed to revoke key");
-    } finally {
-      setRevokingId(null);
-    }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast.success("API Key copied to clipboard!");
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const isMemberOnline = (lastSeen?: string) => {
     if (!lastSeen) return false;
@@ -141,7 +60,9 @@ export function ExtensionSettings() {
           WhatsApp Web Chrome Extension Mode
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Chat natively inside official WhatsApp Web (<code className="text-primary font-mono text-xs">web.whatsapp.com</code>) while WAPI injects a live CRM panel on the right side of your screen.
+          Manage your CRM directly inside official WhatsApp Web (
+          <code className="text-primary font-mono text-xs">web.whatsapp.com</code>
+          ). Team members simply log in with their WAPI email & password.
         </p>
       </div>
 
@@ -152,10 +73,12 @@ export function ExtensionSettings() {
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">
               v1.0.0 Ready
             </span>
-            <h3 className="text-base font-semibold text-foreground">WAPI CRM Extension Package</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              WAPI CRM Extension Package
+            </h3>
           </div>
           <p className="text-xs text-muted-foreground">
-            Includes content script, manifest v3, side-panel UI, and Meta CAPI conversion trigger engine.
+            Includes direct Email & Password login, live WhatsApp contact sync, pipeline stage management, and Meta CAPI conversion tracking.
           </p>
         </div>
 
@@ -169,7 +92,7 @@ export function ExtensionSettings() {
         </a>
       </div>
 
-      {/* Step-by-Step Installation */}
+      {/* Quick 3-Step Setup Guide */}
       <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
           <ShieldCheck className="size-4 text-emerald-400" />
@@ -181,7 +104,9 @@ export function ExtensionSettings() {
             <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
               1
             </span>
-            <h4 className="text-xs font-semibold text-foreground">Download & Extract</h4>
+            <h4 className="text-xs font-semibold text-foreground">
+              Download & Extract
+            </h4>
             <p className="text-[11px] text-muted-foreground">
               Download <code className="text-primary">extension.zip</code> above and unzip it to a folder on your computer.
             </p>
@@ -191,7 +116,9 @@ export function ExtensionSettings() {
             <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
               2
             </span>
-            <h4 className="text-xs font-semibold text-foreground">Load in Chrome</h4>
+            <h4 className="text-xs font-semibold text-foreground">
+              Load in Chrome
+            </h4>
             <p className="text-[11px] text-muted-foreground">
               Open <code className="text-primary">chrome://extensions</code> in your browser, turn on <strong>Developer mode</strong> (top right), and click <strong>Load unpacked</strong>.
             </p>
@@ -201,115 +128,79 @@ export function ExtensionSettings() {
             <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
               3
             </span>
-            <h4 className="text-xs font-semibold text-foreground">Open WhatsApp Web</h4>
+            <h4 className="text-xs font-semibold text-foreground">
+              Sign In on WhatsApp Web
+            </h4>
             <p className="text-[11px] text-muted-foreground">
-              Go to <code className="text-primary">web.whatsapp.com</code>, click ⚙️ in the WAPI side panel, and paste your assigned Team Key below.
+              Go to <code className="text-primary">web.whatsapp.com</code> and simply enter your WAPI email and password into the side panel!
             </p>
           </div>
         </div>
       </div>
 
-      {/* Multi-User Connection API Key Generator */}
+      {/* Team Member Status Roster */}
       <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <KeyRound className="size-4 text-primary" />
-            Team Member Key Management (User-by-User)
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Assign keys specifically to team members. When a team member uses their key in WhatsApp Web, WAPI tracks their real-time online status.
-          </p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="flex-1">
-            <select
-              value={selectedMember}
-              onChange={(e) => setSelectedMember(e.target.value)}
-              className="w-full h-9 rounded-xl border border-input bg-background px-3 text-xs text-foreground outline-none focus:border-primary"
-            >
-              <option value="">-- Select Team Member --</option>
-              {members.map((m) => (
-                <option key={m.user_id} value={m.user_id}>
-                  {m.full_name || m.email || "Team Member"} {isMemberOnline(m.last_seen_at) ? "(🟢 Online)" : "(⚪ Offline)"}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <Button
-            size="sm"
-            onClick={handleGenerateKey}
-            disabled={generating}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 h-9"
-          >
-            {generating ? "Generating..." : "+ Create Member Key"}
-          </Button>
-        </div>
-
-        {createdKey && (
-          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-400">⚠️ New Extension API Secret Key (Save Now):</span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => copyToClipboard(createdKey)}
-                className="h-7 text-xs text-emerald-400 hover:bg-emerald-500/20"
-              >
-                {copied ? <Check className="size-3.5 mr-1" /> : <Copy className="size-3.5 mr-1" />}
-                {copied ? "Copied Secret" : "Copy Secret Key"}
-              </Button>
-            </div>
-            <Input
-              readOnly
-              value={createdKey}
-              className="bg-background font-mono text-xs text-foreground border-emerald-500/30"
-            />
-            <p className="text-[11px] text-emerald-300/80">
-              Copy this secret key and paste it into the ⚙️ Settings dialog inside your WhatsApp Web extension side panel.
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <UsersRound className="size-4 text-primary" />
+              Team Members & Live Presence
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Each team member logs into the WhatsApp Web extension using their existing WAPI credentials.
             </p>
           </div>
-        )}
+        </div>
 
-        {/* Existing Active Keys Roster */}
-        {existingKeys.length > 0 && (
-          <div className="space-y-2 pt-3 border-t border-border/60">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Team Keys Roster</h4>
-            <div className="space-y-2">
-              {existingKeys.map((k) => (
-                <div key={k.id} className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 p-3 text-xs">
-                  <div className="space-y-0.5">
+        <div className="space-y-2">
+          {members.map((m) => {
+            const online = isMemberOnline(m.last_seen_at);
+            return (
+              <div
+                key={m.user_id}
+                className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 p-3 text-xs"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="size-8 rounded-full bg-muted flex items-center justify-center font-bold text-xs uppercase text-primary border border-border">
+                    {(m.full_name || m.email || "U").charAt(0)}
+                  </div>
+                  <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-foreground">{k.name}</span>
-                      <span className="font-mono text-[11px] text-muted-foreground">({k.key_prefix}…)</span>
+                      <span className="font-semibold text-foreground">
+                        {m.full_name || "Team Member"}
+                      </span>
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                        {m.role}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                      <span>Created: {new Date(k.created_at).toLocaleDateString()}</span>
-                      {k.last_used_at && (
-                        <span className="text-emerald-400 flex items-center gap-1">
-                          <Circle className="size-2 fill-emerald-400 text-emerald-400" />
-                          Last used {new Date(k.last_used_at).toLocaleTimeString()}
-                        </span>
-                      )}
+                    <div className="text-[11px] text-muted-foreground">
+                      {m.email}
                     </div>
                   </div>
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={revokingId === k.id}
-                    onClick={() => handleRevokeKey(k.id)}
-                    className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <Trash2 className="size-3.5 mr-1" />
-                    {revokingId === k.id ? "Revoking..." : "Revoke Key"}
-                  </Button>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                      online
+                        ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                        : "bg-muted text-muted-foreground border border-border/60"
+                    }`}
+                  >
+                    <Circle
+                      className={`size-2 ${
+                        online
+                          ? "fill-emerald-400 text-emerald-400 animate-pulse"
+                          : "fill-muted-foreground text-muted-foreground"
+                      }`}
+                    />
+                    {online ? "Online on WhatsApp Web" : "Offline"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

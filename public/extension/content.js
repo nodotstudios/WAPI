@@ -45,43 +45,43 @@
     document.body.appendChild(panelIframe);
   }
 
-  // Extract phone number from WhatsApp Web DOM
-  function extractActivePhone() {
+  // Extract phone number and name from WhatsApp Web DOM
+  function extractActiveContact() {
     try {
       const header = document.querySelector("#main header");
-      if (!header) return null;
+      if (!header) return { phone: null, name: null };
 
-      // Try finding title or phone text
+      // Try finding title or contact text
       const titleEl = header.querySelector("span[title]") || header.querySelector("div[role='button'] span");
-      if (!titleEl) return null;
+      const titleText = (titleEl?.getAttribute("title") || titleEl?.textContent || "").trim();
+      const titleDigits = titleText.replace(/\D/g, "");
 
-      const titleText = titleEl.getAttribute("title") || titleEl.textContent || "";
-      const digits = titleText.replace(/\D/g, "");
+      let phone = titleDigits.length >= 7 ? titleDigits : null;
+      let name = titleDigits.length >= 7 ? null : titleText;
 
-      if (digits && digits.length >= 7) {
-        return digits;
+      // Check subtext or phone attributes in chat header for secondary digits
+      if (!phone) {
+        const subtextEl = header.querySelector("span.selectable-text") || header.querySelector("span[dir='auto']");
+        if (subtextEl) {
+          const subDigits = subtextEl.textContent.replace(/\D/g, "");
+          if (subDigits && subDigits.length >= 7) phone = subDigits;
+        }
       }
 
-      // Check subtext or phone attributes in chat header
-      const subtextEl = header.querySelector("span.selectable-text") || header.querySelector("span[dir='auto']");
-      if (subtextEl) {
-        const subDigits = subtextEl.textContent.replace(/\D/g, "");
-        if (subDigits && subDigits.length >= 7) return subDigits;
-      }
-
-      return titleText.trim();
+      return { phone: phone || "", name: name || titleText || "" };
     } catch (e) {
-      return null;
+      return { phone: null, name: null };
     }
   }
 
-  // Send phone updates to panel iframe
-  function notifyPanel(phone) {
+  // Send contact updates to panel iframe
+  function notifyPanel(contactData) {
     if (!panelIframe || !panelIframe.contentWindow) return;
     panelIframe.contentWindow.postMessage(
       {
         type: "WAPI_CONTACT_CHANGED",
-        phone: phone,
+        phone: contactData.phone || "",
+        name: contactData.name || "",
       },
       "*"
     );
@@ -90,11 +90,12 @@
   // Monitor DOM for conversation switches
   function observeChatHeader() {
     const observer = new MutationObserver(() => {
-      const phone = extractActivePhone();
-      if (phone && phone !== activePhone) {
-        activePhone = phone;
-        console.log("[WAPI Extension] Active contact detected:", activePhone);
-        notifyPanel(activePhone);
+      const contact = extractActiveContact();
+      const currentId = contact.phone || contact.name;
+      if (currentId && currentId !== activePhone) {
+        activePhone = currentId;
+        console.log("[WAPI Extension] Active contact detected:", contact);
+        notifyPanel(contact);
       }
     });
 
@@ -104,11 +105,11 @@
     });
   }
 
-  // Listen for messages from panel (e.g., requests for current phone)
+  // Listen for messages from panel (e.g., requests for current contact)
   window.addEventListener("message", (event) => {
     if (event.data && event.data.type === "WAPI_REQUEST_ACTIVE_PHONE") {
-      const phone = extractActivePhone() || activePhone;
-      notifyPanel(phone);
+      const contact = extractActiveContact();
+      notifyPanel(contact);
     }
   });
 
@@ -118,10 +119,10 @@
     injectSidePanel();
     observeChatHeader();
     setTimeout(() => {
-      const phone = extractActivePhone();
-      if (phone) {
-        activePhone = phone;
-        notifyPanel(phone);
+      const contact = extractActiveContact();
+      if (contact.phone || contact.name) {
+        activePhone = contact.phone || contact.name;
+        notifyPanel(contact);
       }
     }, 2000);
   }
