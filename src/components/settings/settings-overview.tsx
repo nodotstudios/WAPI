@@ -159,17 +159,11 @@ export function SettingsOverview({
     subtitle: ReactNode;
   }[] = [
     {
-      section: 'whatsapp',
-      loading: whatsappLoading,
-      subtitle: !whatsapp?.configured ? (
-        t('notSetup')
-      ) : whatsapp.connected ? (
+      section: 'extension',
+      loading: false,
+      subtitle: (
         <>
-          <StatusDot tone="ok" /> {t('connected')}
-        </>
-      ) : (
-        <>
-          <StatusDot tone="muted" /> {t('needsReconnecting')}
+          <StatusDot tone="ok" /> WhatsApp Web Extension Ready
         </>
       ),
     },

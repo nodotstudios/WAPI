@@ -25,21 +25,70 @@ export async function POST(request: Request) {
       );
     }
 
-    const { accountId } = authCtx;
+    const { accountId, userId } = authCtx;
     const supabase = supabaseAdmin();
 
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders() });
     }
 
     const { deal_id, contact_id, stage_id, title, value, currency, status, won_reason, lost_reason } = body;
 
     let targetDealId = deal_id;
 
+    // Ensure we have a valid fallback user ID
+    let finalUserId = userId;
+    if (!finalUserId) {
+      const { data: member } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("account_id", accountId)
+        .limit(1)
+        .single();
+      finalUserId = member?.user_id;
+    }
+
     if (!targetDealId) {
       if (!contact_id) {
-        return NextResponse.json({ error: "contact_id or deal_id required" }, { status: 400 });
+        return NextResponse.json({ error: "contact_id or deal_id required" }, { status: 400, headers: corsHeaders() });
+      }
+
+      // Fetch default pipeline for account
+      const { data: pipeline } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("account_id", accountId)
+        .limit(1)
+        .single();
+
+      let pipelineId = pipeline?.id;
+      let finalStageId = stage_id;
+
+      if (!finalStageId && pipelineId) {
+        const { data: firstStage } = await supabase
+          .from("pipeline_stages")
+          .select("id")
+          .eq("pipeline_id", pipelineId)
+          .order("position", { ascending: true })
+          .limit(1)
+          .single();
+        finalStageId = firstStage?.id;
+      }
+
+      if (!pipelineId || !finalStageId) {
+        // Fallback to any stage in account
+        const { data: anyStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, pipeline_id")
+          .eq("account_id", accountId)
+          .order("position", { ascending: true })
+          .limit(1)
+          .single();
+        if (anyStage) {
+          pipelineId = anyStage.pipeline_id;
+          finalStageId = anyStage.id;
+        }
       }
 
       // Create new deal
@@ -47,9 +96,11 @@ export async function POST(request: Request) {
         .from("deals")
         .insert({
           account_id: accountId,
+          user_id: finalUserId,
+          pipeline_id: pipelineId,
           contact_id: contact_id,
-          title: title || "New Deal via Extension",
-          stage_id: stage_id || undefined,
+          title: title || "New Lead via WhatsApp",
+          stage_id: finalStageId,
           value: parseFloat(value) || 0,
           currency: currency || "USD",
           status: status || "open",
@@ -58,7 +109,8 @@ export async function POST(request: Request) {
         .single();
 
       if (createErr || !newDeal) {
-        return NextResponse.json({ error: createErr?.message || "Failed to create deal" }, { status: 500 });
+        console.error("Deal create error:", createErr);
+        return NextResponse.json({ error: createErr?.message || "Failed to create deal" }, { status: 500, headers: corsHeaders() });
       }
       targetDealId = newDeal.id;
     } else {
@@ -73,6 +125,7 @@ export async function POST(request: Request) {
       if (lost_reason) updatePayload.lost_reason = lost_reason;
       if (status === "won") updatePayload.won_at = new Date().toISOString();
       if (status === "lost") updatePayload.lost_at = new Date().toISOString();
+      updatePayload.last_activity_at = new Date().toISOString();
 
       const { error: updateErr } = await supabase
         .from("deals")
@@ -81,7 +134,19 @@ export async function POST(request: Request) {
         .eq("account_id", accountId);
 
       if (updateErr) {
-        return NextResponse.json({ error: updateErr.message }, { status: 500 });
+        return NextResponse.json({ error: updateErr.message }, { status: 500, headers: corsHeaders() });
+      }
+
+      // Record stage history
+      if (stage_id) {
+        void supabase
+          .from("deal_stage_history")
+          .insert({
+            account_id: accountId,
+            deal_id: targetDealId,
+            to_stage_id: stage_id,
+            user_id: finalUserId || null,
+          });
       }
     }
 

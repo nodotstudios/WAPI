@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { accountId } = authCtx;
+    const { accountId, userId } = authCtx;
     const supabase = supabaseAdmin();
 
     const body = await request.json().catch(() => null);
@@ -32,29 +32,57 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders() });
     }
 
-    const { deal_id, contact_id, type, title, description, scheduled_at } = body;
+    let { deal_id, contact_id, type, title, description, scheduled_at } = body;
 
-    if (!type || !title) {
-      return NextResponse.json({ error: "type and title are required" }, { status: 400, headers: corsHeaders() });
+    if (!title) {
+      title = "Scheduled Follow-up";
     }
 
+    // Normalize type to valid DB enum values ('call', 'meeting', 'google_meet', 'email', 'note', 'follow_up', 'task', 'stage_change')
+    let normalizedType = "follow_up";
+    if (type === "call" || type === "call_followup") normalizedType = "call";
+    else if (type === "meeting" || type === "meeting_followup") normalizedType = "meeting";
+    else if (type === "note") normalizedType = "note";
+    else if (type === "task") normalizedType = "task";
+
+    // Ensure we have a valid fallback user ID
+    let finalUserId = userId;
+    if (!finalUserId) {
+      const { data: member } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("account_id", accountId)
+        .limit(1)
+        .single();
+      finalUserId = member?.user_id;
+    }
+
+    if (!finalUserId) {
+      return NextResponse.json(
+        { error: "No user found to associate activity with" },
+        { status: 400, headers: corsHeaders() }
+      );
+    }
+
+    // Insert CRM activity with all required columns
     const { data: activity, error: err } = await supabase
       .from("crm_activities")
       .insert({
         account_id: accountId,
-        deal_id: deal_id || undefined,
-        contact_id: contact_id || undefined,
-        type: type,
-        title: title,
+        user_id: finalUserId,
+        deal_id: deal_id || null,
+        contact_id: contact_id || null,
+        type: normalizedType,
+        title: title.trim(),
         description: description || null,
-        scheduled_at: scheduled_at || new Date().toISOString(),
-        status: scheduled_at ? "pending" : "completed",
-        next_follow_up_at: scheduled_at || undefined,
+        scheduled_at: scheduled_at ? new Date(scheduled_at).toISOString() : new Date().toISOString(),
+        status: "pending",
       })
       .select()
       .single();
 
     if (err) {
+      console.error("CRM Activity insert error:", err);
       return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders() });
     }
 

@@ -77,7 +77,7 @@ function SettingsPageInner() {
     profile: <ProfileForm />,
     security: <SecurityPanel />,
     appearance: <AppearancePanel />,
-    whatsapp: <WhatsAppConfig />,
+    extension: <ExtensionSettings />,
     'facebook-ads': <FacebookAdsConfig />,
     'google-calendar': <GoogleCalendarConfig />,
     'data-retention': <DataRetentionSettings />,
@@ -86,7 +86,6 @@ function SettingsPageInner() {
     deals: <DealsSettings />,
     members: <MembersTab />,
     api: <ApiKeysSettings />,
-    extension: <ExtensionSettings />,
   };
 
   return (

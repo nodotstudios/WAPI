@@ -1,6 +1,6 @@
 /**
  * WAPI Extension Side-Panel Controller
- * Native Email & Password Session Auth + CRM Workspace
+ * Native Email & Password Session Auth + Fast CRM Workspace
  */
 
 let serverUrl = "https://wapi-blond.vercel.app";
@@ -12,6 +12,7 @@ let currentName = "";
 let currentContact = null;
 let currentDeal = null;
 let stagesList = [];
+let fetchAbortController = null;
 
 // DOM Elements - Auth & Views
 const viewLogin = document.getElementById("view-login");
@@ -82,7 +83,6 @@ function initSession() {
         authToken = items.wapiAuthToken;
         currentUser = items.wapiUser;
         renderView(true);
-        fetchCrmContext(currentPhone, currentName);
       } else {
         renderView(false);
       }
@@ -169,8 +169,17 @@ async function fetchCrmContext(phone, name) {
 
   if (!authToken) return;
 
-  cName.textContent = currentName || "Loading CRM...";
-  cPhone.textContent = currentPhone || "Fetching contact...";
+  // Render optimistic name & phone instantly
+  if (currentName || currentPhone) {
+    cName.textContent = currentName || `Contact (${currentPhone.slice(-4)})`;
+    cPhone.textContent = currentPhone || "Syncing...";
+    cAvatar.textContent = (currentName || currentPhone || "C").charAt(0).toUpperCase();
+  }
+
+  if (fetchAbortController) {
+    fetchAbortController.abort();
+  }
+  fetchAbortController = new AbortController();
 
   try {
     const params = new URLSearchParams();
@@ -179,11 +188,11 @@ async function fetchCrmContext(phone, name) {
 
     const res = await fetch(`${serverUrl}/api/extension/context?${params.toString()}`, {
       headers: getAuthHeaders(),
+      signal: fetchAbortController.signal,
     });
 
     if (!res.ok) {
       if (res.status === 401) {
-        // Session expired
         authToken = "";
         currentUser = null;
         if (chrome.storage && chrome.storage.local) {
@@ -212,21 +221,28 @@ async function fetchCrmContext(phone, name) {
       cAvatar.textContent = "?";
     }
 
-    // Render Stage Options
-    stageSelect.innerHTML = stagesList
-      .map(
-        (s) => `<option value="${s.id}" ${currentDeal?.stage_id === s.id ? "selected" : ""}>${s.name}</option>`
-      )
-      .join("");
+    // Render Stages Dropdown & Match Current Deal Stage
+    if (stagesList.length > 0) {
+      stageSelect.innerHTML = stagesList
+        .map(
+          (s) => `<option value="${s.id}" ${currentDeal?.stage_id === s.id ? "selected" : ""}>${s.name}</option>`
+        )
+        .join("");
+
+      if (currentDeal?.stage_id) {
+        stageSelect.value = currentDeal.stage_id;
+      }
+    }
 
     // Render Deal Info
     if (currentDeal) {
       dealTitle.textContent = currentDeal.title || "Active Deal";
       dealStatus.textContent = (currentDeal.status || "OPEN").toUpperCase();
+      dealStatus.className = currentDeal.status === "won" ? "badge bg-emerald-500/20 text-emerald-400" : "badge";
       dealValueInput.value = currentDeal.value || 0;
       dealCurrencySelect.value = currentDeal.currency || "USD";
     } else {
-      dealTitle.textContent = currentContact ? "No Active Deal (Click to Create)" : "Pipeline Ready";
+      dealTitle.textContent = currentContact ? "Lead Detected (Create Deal)" : "Pipeline Ready";
       dealStatus.textContent = "NEW";
       dealValueInput.value = 0;
     }
@@ -234,9 +250,8 @@ async function fetchCrmContext(phone, name) {
     // Render Timeline Activities
     renderTimeline(data.activities || []);
   } catch (err) {
+    if (err.name === "AbortError") return;
     console.error("[WAPI Extension] Fetch context error:", err);
-    cName.textContent = "Unable to load contact";
-    cPhone.textContent = err.message || "Connection error";
   }
 }
 
@@ -252,7 +267,7 @@ function renderTimeline(acts) {
       (a) => `
     <div class="timeline-item">
       <div class="timeline-title">${a.title || a.type}</div>
-      <div class="timeline-time">${new Date(a.scheduled_at || a.created_at).toLocaleDateString()} — ${a.status}</div>
+      <div class="timeline-time">${new Date(a.scheduled_at || a.created_at).toLocaleDateString()} — ${(a.status || "").toUpperCase()}</div>
       ${a.description ? `<div style="color: #cbd5e1; margin-top: 2px;">${a.description}</div>` : ""}
     </div>
   `
@@ -326,19 +341,19 @@ btnMarkWon.addEventListener("click", async () => {
   }
 });
 
-// Save Follow-up
+// Save Follow-up (Normalizes type to DB constraints)
 btnSaveFollowup.addEventListener("click", async () => {
   if (!currentContact || !authToken) return;
 
   btnSaveFollowup.textContent = "Saving...";
   try {
     const channel = fuChannel.value;
-    const typeStr = channel === "chat" ? "chat_followup" : channel === "call" ? "call_followup" : "meeting_followup";
+    const normType = channel === "call" ? "call" : channel === "meeting" ? "meeting" : "follow_up";
 
     const body = {
       deal_id: currentDeal?.id,
       contact_id: currentContact.id,
-      type: typeStr,
+      type: normType,
       title: fuTitle.value.trim() || `Follow-up via ${channel}`,
       scheduled_at: fuTime.value ? new Date(fuTime.value).toISOString() : new Date().toISOString(),
     };
@@ -373,4 +388,4 @@ window.addEventListener("message", (event) => {
 initSession();
 setTimeout(() => {
   window.parent.postMessage({ type: "WAPI_REQUEST_ACTIVE_PHONE" }, "*");
-}, 300);
+}, 200);

@@ -2,24 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, Kanban, Calendar, Settings } from "lucide-react";
+import { LayoutDashboard, Kanban, Calendar, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MobileNavBarProps {
-  /** Optional unread count badge for inbox */
+  /** Optional unread count badge */
   unreadCount?: number;
 }
 
 export function MobileNavBar({ unreadCount = 0 }: MobileNavBarProps) {
   const pathname = usePathname();
 
-  const navItems = [
+  interface MobileNavItem {
+    href: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    active: boolean;
+    badge?: number;
+  }
+
+  const navItems: MobileNavItem[] = [
     {
-      href: "/inbox",
-      label: "Inbox",
-      icon: MessageSquare,
-      active: pathname.startsWith("/inbox"),
-      badge: unreadCount > 0 ? unreadCount : undefined,
+      href: "/dashboard",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      active: pathname === "/dashboard",
     },
     {
       href: "/pipelines",

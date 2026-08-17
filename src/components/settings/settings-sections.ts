@@ -29,7 +29,7 @@ export const SETTINGS_SECTIONS = [
   'profile',
   'security',
   'appearance',
-  'whatsapp',
+  'extension',
   'facebook-ads',
   'google-calendar',
   'data-retention',
@@ -38,7 +38,6 @@ export const SETTINGS_SECTIONS = [
   'deals',
   'members',
   'api',
-  'extension',
 ] as const;
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
@@ -58,8 +57,8 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   profile: { id: 'profile', label: 'Your profile', icon: User, group: 'account' },
   security: { id: 'security', label: 'Login & security', icon: Shield, group: 'account' },
   appearance: { id: 'appearance', label: 'Appearance', icon: Palette, group: 'account' },
-  whatsapp: { id: 'whatsapp', label: 'WhatsApp Web', icon: PlugZap, group: 'workspace' },
-  'facebook-ads': { id: 'facebook-ads', label: 'Facebook Pixel', icon: Globe, group: 'workspace' },
+  extension: { id: 'extension', label: 'Chrome Extension', icon: PlugZap, group: 'workspace' },
+  'facebook-ads': { id: 'facebook-ads', label: 'Meta Pixel & CAPI', icon: Globe, group: 'workspace' },
   'google-calendar': { id: 'google-calendar', label: 'Google Calendar', icon: Calendar, group: 'workspace' },
   'data-retention': { id: 'data-retention', label: 'Data Retention', icon: Database, group: 'workspace' },
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
@@ -67,7 +66,6 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
-  extension: { id: 'extension', label: 'Chrome Extension', icon: PlugZap, group: 'workspace' },
 };
 
 export const RAIL_GROUPS: { label: string | null; group: SectionMeta['group'] }[] = [
@@ -87,6 +85,7 @@ function isSection(value: string | null): value is SettingsSection {
  * Overview landing.
  */
 export function resolveSection(raw: string | null): SettingsSection {
+  if (raw === 'whatsapp') return 'extension';
   if (raw === 'tags' || raw === 'custom-fields') return 'fields';
   if (isSection(raw)) return raw;
   return DEFAULT_SECTION;

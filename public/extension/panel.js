@@ -1,22 +1,32 @@
 /**
  * WAPI Extension Side-Panel Controller
+ * Native Email & Password Session Auth + CRM Workspace
  */
 
-let currentPhone = null;
+let serverUrl = "https://wapi-blond.vercel.app";
+let authToken = "";
+let currentUser = null;
+
+let currentPhone = "";
+let currentName = "";
 let currentContact = null;
 let currentDeal = null;
 let stagesList = [];
-let serverUrl = "https://wapi-blond.vercel.app";
-let apiKey = "";
 
-// DOM Elements
-const cfgModal = document.getElementById("config-modal");
-const cfgUrlInput = document.getElementById("cfg-url");
-const cfgApiKeyInput = document.getElementById("cfg-apikey");
-const openSettingsBtn = document.getElementById("open-settings-btn");
-const closeSettingsBtn = document.getElementById("close-config-btn");
-const saveConfigBtn = document.getElementById("save-config-btn");
+// DOM Elements - Auth & Views
+const viewLogin = document.getElementById("view-login");
+const viewCrm = document.getElementById("view-crm");
+const authStatusContainer = document.getElementById("auth-status-container");
+const userDisplayName = document.getElementById("user-display-name");
+const btnLogout = document.getElementById("btn-logout");
 
+const loginUrlInput = document.getElementById("login-url");
+const loginEmailInput = document.getElementById("login-email");
+const loginPasswordInput = document.getElementById("login-password");
+const btnLogin = document.getElementById("btn-login");
+const loginError = document.getElementById("login-error");
+
+// DOM Elements - Contact & CRM
 const cAvatar = document.getElementById("c-avatar");
 const cName = document.getElementById("c-name");
 const cPhone = document.getElementById("c-phone");
@@ -37,65 +47,130 @@ const btnSaveFollowup = document.getElementById("btn-save-followup");
 
 const timelineList = document.getElementById("timeline-list");
 
-// Load stored settings
-function loadSettings() {
-  if (chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(["wapiServerUrl", "wapiApiKey"], (items) => {
-      if (items.wapiServerUrl) serverUrl = items.wapiServerUrl.replace(/\/$/, "");
-      if (items.wapiApiKey) apiKey = items.wapiApiKey;
-      cfgUrlInput.value = serverUrl;
-      cfgApiKeyInput.value = apiKey;
-
-      if (!apiKey) {
-        cfgModal.style.display = "block";
-      }
-    });
-  }
-}
-
-// Save config
-saveConfigBtn.addEventListener("click", () => {
-  serverUrl = cfgUrlInput.value.trim().replace(/\/$/, "") || "https://wapi-blond.vercel.app";
-  apiKey = cfgApiKeyInput.value.trim();
-
-  if (chrome.storage && chrome.storage.local) {
-    chrome.storage.local.set({
-      wapiServerUrl: serverUrl,
-      wapiApiKey: apiKey,
-    });
-  }
-
-  cfgModal.style.display = "none";
-  if (currentPhone) fetchCrmContext(currentPhone);
-});
-
-openSettingsBtn.addEventListener("click", () => {
-  cfgModal.style.display = "block";
-});
-
-closeSettingsBtn.addEventListener("click", () => {
-  cfgModal.style.display = "none";
-});
-
-function getHeaders() {
+// Helper to get request headers with Auth Token
+function getAuthHeaders() {
   const headers = { "Content-Type": "application/json" };
-  if (apiKey) {
-    const cleanKey = apiKey.trim();
-    headers["Authorization"] = `Bearer ${cleanKey}`;
-    headers["X-API-Key"] = cleanKey;
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken.trim()}`;
   }
   return headers;
 }
 
-let currentName = null;
+// Switch between Login and CRM views
+function renderView(isLoggedIn) {
+  if (isLoggedIn && currentUser) {
+    viewLogin.style.display = "none";
+    viewCrm.style.display = "block";
+    authStatusContainer.style.display = "block";
+    userDisplayName.textContent = currentUser.name || currentUser.email || "Logged In";
+  } else {
+    viewLogin.style.display = "block";
+    viewCrm.style.display = "none";
+    authStatusContainer.style.display = "none";
+  }
+}
 
-// Fetch CRM context for active contact
+// Load stored session on startup
+function initSession() {
+  if (chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(["wapiAuthToken", "wapiUser", "wapiServerUrl"], (items) => {
+      if (items.wapiServerUrl) {
+        serverUrl = items.wapiServerUrl.replace(/\/$/, "");
+        loginUrlInput.value = serverUrl;
+      }
+      if (items.wapiAuthToken && items.wapiUser) {
+        authToken = items.wapiAuthToken;
+        currentUser = items.wapiUser;
+        renderView(true);
+        fetchCrmContext(currentPhone, currentName);
+      } else {
+        renderView(false);
+      }
+    });
+  } else {
+    renderView(false);
+  }
+}
+
+// Handle Sign In with Email & Password
+btnLogin.addEventListener("click", async () => {
+  const url = loginUrlInput.value.trim().replace(/\/$/, "") || "https://wapi-blond.vercel.app";
+  const email = loginEmailInput.value.trim();
+  const password = loginPasswordInput.value;
+
+  loginError.style.display = "none";
+  loginError.textContent = "";
+
+  if (!email || !password) {
+    loginError.textContent = "Please enter both email and password.";
+    loginError.style.display = "block";
+    return;
+  }
+
+  btnLogin.textContent = "Signing In...";
+  btnLogin.disabled = true;
+
+  try {
+    const res = await fetch(`${url}/api/extension/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.token) {
+      throw new Error(data.error || `Login failed (${res.status})`);
+    }
+
+    serverUrl = url;
+    authToken = data.token;
+    currentUser = data.user;
+
+    // Save to storage
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({
+        wapiAuthToken: authToken,
+        wapiUser: currentUser,
+        wapiServerUrl: serverUrl,
+      });
+    }
+
+    renderView(true);
+    fetchCrmContext(currentPhone, currentName);
+  } catch (err) {
+    console.error("[WAPI Extension] Login error:", err);
+    loginError.textContent = err.message || "Failed to sign in. Check credentials.";
+    loginError.style.display = "block";
+  } finally {
+    btnLogin.textContent = "Sign In to WAPI";
+    btnLogin.disabled = false;
+  }
+});
+
+// Handle Sign Out
+btnLogout.addEventListener("click", () => {
+  authToken = "";
+  currentUser = null;
+  currentContact = null;
+  currentDeal = null;
+
+  if (chrome.storage && chrome.storage.local) {
+    chrome.storage.local.remove(["wapiAuthToken", "wapiUser"]);
+  }
+
+  renderView(false);
+});
+
+// Fetch CRM Context for Active Contact
 async function fetchCrmContext(phone, name) {
   currentPhone = phone || "";
   currentName = name || "";
 
+  if (!authToken) return;
+
   cName.textContent = currentName || "Loading CRM...";
-  cPhone.textContent = currentPhone || "Fetching contact data...";
+  cPhone.textContent = currentPhone || "Fetching contact...";
 
   try {
     const params = new URLSearchParams();
@@ -103,14 +178,18 @@ async function fetchCrmContext(phone, name) {
     if (currentName) params.set("name", currentName);
 
     const res = await fetch(`${serverUrl}/api/extension/context?${params.toString()}`, {
-      headers: getHeaders(),
+      headers: getAuthHeaders(),
     });
 
     if (!res.ok) {
       if (res.status === 401) {
-        cName.textContent = "Key Expired / Invalid";
-        cPhone.textContent = "Click ⚙️ to enter new WAPI Team Key";
-        cfgModal.style.display = "block";
+        // Session expired
+        authToken = "";
+        currentUser = null;
+        if (chrome.storage && chrome.storage.local) {
+          chrome.storage.local.remove(["wapiAuthToken", "wapiUser"]);
+        }
+        renderView(false);
         return;
       }
       const errData = await res.json().catch(() => ({}));
@@ -129,7 +208,7 @@ async function fetchCrmContext(phone, name) {
       cAvatar.textContent = (cName.textContent || "C").charAt(0).toUpperCase();
     } else {
       cName.textContent = currentName || "Select a Chat";
-      cPhone.textContent = currentPhone || "No active conversation selected";
+      cPhone.textContent = currentPhone || "Click any conversation in WhatsApp Web";
       cAvatar.textContent = "?";
     }
 
@@ -156,12 +235,12 @@ async function fetchCrmContext(phone, name) {
     renderTimeline(data.activities || []);
   } catch (err) {
     console.error("[WAPI Extension] Fetch context error:", err);
-    cName.textContent = "Connection Error";
-    cPhone.textContent = err.message || "Check WAPI URL & API key in settings";
+    cName.textContent = "Unable to load contact";
+    cPhone.textContent = err.message || "Connection error";
   }
 }
 
-// Render Timeline
+// Render Timeline Activities
 function renderTimeline(acts) {
   if (!acts || acts.length === 0) {
     timelineList.innerHTML = `<div style="color: #64748b; font-size: 11px;">No activities recorded yet.</div>`;
@@ -183,7 +262,7 @@ function renderTimeline(acts) {
 
 // Update Deal
 btnSaveDeal.addEventListener("click", async () => {
-  if (!currentContact) return;
+  if (!currentContact || !authToken) return;
 
   btnSaveDeal.textContent = "Saving...";
   try {
@@ -198,14 +277,14 @@ btnSaveDeal.addEventListener("click", async () => {
 
     const res = await fetch(`${serverUrl}/api/extension/deal`, {
       method: "POST",
-      headers: getHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify(body),
     });
 
     if (res.ok) {
       btnSaveDeal.textContent = "Saved ✓";
       setTimeout(() => (btnSaveDeal.textContent = "Update Deal"), 2000);
-      if (currentPhone) fetchCrmContext(currentPhone);
+      fetchCrmContext(currentPhone, currentName);
     } else {
       btnSaveDeal.textContent = "Failed ❌";
     }
@@ -216,7 +295,7 @@ btnSaveDeal.addEventListener("click", async () => {
 
 // Mark Deal Won (Triggers Meta CAPI Conversion Event!)
 btnMarkWon.addEventListener("click", async () => {
-  if (!currentContact) return;
+  if (!currentContact || !authToken) return;
 
   btnMarkWon.textContent = "Processing...";
   try {
@@ -231,14 +310,14 @@ btnMarkWon.addEventListener("click", async () => {
 
     const res = await fetch(`${serverUrl}/api/extension/deal`, {
       method: "POST",
-      headers: getHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify(body),
     });
 
     if (res.ok) {
       btnMarkWon.textContent = "🏆 Won & CAPI Fired!";
       setTimeout(() => (btnMarkWon.textContent = "🏆 Mark Won"), 2500);
-      if (currentPhone) fetchCrmContext(currentPhone);
+      fetchCrmContext(currentPhone, currentName);
     } else {
       btnMarkWon.textContent = "Failed ❌";
     }
@@ -249,7 +328,7 @@ btnMarkWon.addEventListener("click", async () => {
 
 // Save Follow-up
 btnSaveFollowup.addEventListener("click", async () => {
-  if (!currentContact) return;
+  if (!currentContact || !authToken) return;
 
   btnSaveFollowup.textContent = "Saving...";
   try {
@@ -266,7 +345,7 @@ btnSaveFollowup.addEventListener("click", async () => {
 
     const res = await fetch(`${serverUrl}/api/extension/activity`, {
       method: "POST",
-      headers: getHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify(body),
     });
 
@@ -274,7 +353,7 @@ btnSaveFollowup.addEventListener("click", async () => {
       btnSaveFollowup.textContent = "Scheduled ✓";
       fuTitle.value = "";
       setTimeout(() => (btnSaveFollowup.textContent = "Save Follow-up"), 2000);
-      if (currentPhone) fetchCrmContext(currentPhone);
+      fetchCrmContext(currentPhone, currentName);
     } else {
       btnSaveFollowup.textContent = "Failed ❌";
     }
@@ -290,9 +369,8 @@ window.addEventListener("message", (event) => {
   }
 });
 
-// Init
-loadSettings();
+// Initialize on load
+initSession();
 setTimeout(() => {
-  fetchCrmContext("", "");
   window.parent.postMessage({ type: "WAPI_REQUEST_ACTIVE_PHONE" }, "*");
-}, 200);
+}, 300);

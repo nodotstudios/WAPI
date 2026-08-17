@@ -82,12 +82,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
-  { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
-  { href: "/notifications", labelKey: "notifications", icon: Bell },
-  { href: "/contacts", labelKey: "contacts", icon: Users },
   { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
+  { href: "/contacts", labelKey: "contacts", icon: Users },
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/agents", labelKey: "aiAgents", icon: Bot },
+  { href: "/notifications", labelKey: "notifications", icon: Bell },
 ];
 
 const crmSubItems = [

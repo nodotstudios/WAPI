@@ -1,234 +1,249 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { useAuth } from '@/hooks/use-auth'
-import { formatCurrency } from '@/lib/currency'
+import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { formatCurrency } from "@/lib/currency";
 import {
+  Users,
+  Trophy,
+  XCircle,
+  Percent,
+  TrendingUp,
+  Clock,
+  ArrowRight,
+  Plus,
+  Kanban,
+  ExternalLink,
+  CheckCircle2,
+  Calendar,
+  Phone,
   MessageSquare,
-  UserPlus,
-  DollarSign,
-  Send,
-} from 'lucide-react'
-
-import {
-  loadActivity,
-  loadConversationsSeries,
-  loadMetrics,
-  loadPipelineDonut,
-  loadResponseTime,
-} from '@/lib/dashboard/queries'
-import type {
-  ActivityItem,
-  ConversationsSeriesPoint,
-  MetricsBundle,
-  PipelineDonutData,
-  ResponseTimeSummary,
-} from '@/lib/dashboard/types'
-
-import { MetricCard } from '@/components/dashboard/metric-card'
-import { SkeletonCard } from '@/components/dashboard/skeleton'
-import { QuickActions } from '@/components/dashboard/quick-actions'
-import { ConversationsChart } from '@/components/dashboard/conversations-chart'
-import { PipelineDonut } from '@/components/dashboard/pipeline-donut'
-import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
-import { ActivityFeed } from '@/components/dashboard/activity-feed'
-
-import { useTranslations } from 'next-intl'
-
-type RangeDays = 7 | 30 | 90
+} from "lucide-react";
+import { MetricCard } from "@/components/dashboard/metric-card";
+import { SkeletonCard } from "@/components/dashboard/skeleton";
+import { Button } from "@/components/ui/button";
+import { loadSalesCrmMetrics, type SalesCrmMetrics } from "@/lib/dashboard/crm-metrics";
 
 export default function DashboardPage() {
-  const t = useTranslations('Dashboard.page')
-  const { defaultCurrency } = useAuth()
-  const [metrics, setMetrics] = useState<MetricsBundle | null>(null)
-  const [metricsLoading, setMetricsLoading] = useState(true)
+  const { defaultCurrency } = useAuth();
+  const [data, setData] = useState<SalesCrmMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [range, setRange] = useState<RangeDays>(30)
-  // Keep a cache per range so switching tabs doesn't re-fetch what we
-  // already have. Ranges the user hasn't opened yet stay null and
-  // trigger a fetch on first view.
-  const [series, setSeries] = useState<Record<RangeDays, ConversationsSeriesPoint[] | null>>({
-    7: null,
-    30: null,
-    90: null,
-  })
-  const [seriesLoading, setSeriesLoading] = useState(true)
-
-  const [pipeline, setPipeline] = useState<PipelineDonutData | null>(null)
-  const [pipelineLoading, setPipelineLoading] = useState(true)
-
-  const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(null)
-  const [responseTimeLoading, setResponseTimeLoading] = useState(true)
-
-  const [activity, setActivity] = useState<ActivityItem[] | null>(null)
-  const [activityLoading, setActivityLoading] = useState(true)
-
-  const loadAll = useCallback(() => {
-    const db = createClient()
-
-    // Kick everything off in parallel. Each block has its own
-    // setState + finally so a slow query doesn't hold up faster
-    // sections — each widget shows its own skeleton independently.
-    void loadMetrics(db)
-      .then((m) => setMetrics(m))
-      .catch((err) => console.error('[dashboard] metrics failed:', err))
-      .finally(() => setMetricsLoading(false))
-
-    void loadConversationsSeries(db, 30)
-      .then((s) => setSeries((prev) => ({ ...prev, 30: s })))
-      .catch((err) => console.error('[dashboard] series failed:', err))
-      .finally(() => setSeriesLoading(false))
-
-    void loadPipelineDonut(db)
-      .then((p) => setPipeline(p))
-      .catch((err) => console.error('[dashboard] pipeline failed:', err))
-      .finally(() => setPipelineLoading(false))
-
-    void loadResponseTime(db)
-      .then((r) => setResponseTime(r))
-      .catch((err) => console.error('[dashboard] response time failed:', err))
-      .finally(() => setResponseTimeLoading(false))
-
-    // Fetch up to 50 so the biggest page-size option in the feed
-    // (50 rows) is already in memory — switching sizes then becomes
-    // a pure client-side slice with no extra round trip.
-    void loadActivity(db, 50)
-      .then((a) => setActivity(a))
-      .catch((err) => console.error('[dashboard] activity failed:', err))
-      .finally(() => setActivityLoading(false))
-  }, [])
+  const loadData = useCallback(async () => {
+    try {
+      const db = createClient();
+      const metrics = await loadSalesCrmMetrics(db);
+      setData(metrics);
+    } catch (err) {
+      console.error("[Dashboard] Load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    loadAll()
-  }, [loadAll])
+    loadData();
+  }, [loadData]);
 
-  // Range switch handler — kept in an event callback (not an effect)
-  // so the setState calls stay out of the react-hooks/set-state-in-effect
-  // rule's way. The cached bucket check means switching back to a
-  // previously-viewed range is instant and doesn't re-fetch.
-  const handleRangeChange = useCallback(
-    (r: RangeDays) => {
-      setRange(r)
-      if (series[r] !== null) return
-      setSeriesLoading(true)
-      const db = createClient()
-      loadConversationsSeries(db, r)
-        .then((s) => setSeries((prev) => ({ ...prev, [r]: s })))
-        .catch((err) => console.error('[dashboard] series failed:', err))
-        .finally(() => setSeriesLoading(false))
-    },
-    [series],
-  )
+  const leadDelta = (data?.newLeadsToday ?? 0) - (data?.newLeadsYesterday ?? 0);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('description')}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Sales & Conversion Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Track incoming lead volume, conversion rates, and closed won revenue in real-time.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link href="/pipelines">
+            <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+              <Kanban className="size-4" />
+              Open Deal Pipeline
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* Metric cards */}
+      {/* 4 Primary Conversion Metric Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {metricsLoading || !metrics ? (
+        {loading || !data ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           <>
             <MetricCard
-              title={t('activeConversations')}
-              value={metrics.activeConversations.current.toLocaleString()}
-              icon={MessageSquare}
+              title="Total Lead Inflow"
+              value={data.totalLeads.toLocaleString()}
+              icon={Users}
+              subtitle={`${data.newLeadsToday} new leads today`}
               delta={{
-                sign: metrics.activeConversations.previous,
-                label: deltaLabel(
-                  metrics.activeConversations.previous, 
-                  t('newTodayVsYesterday'), 
-                  t('noChange', { suffix: t('newTodayVsYesterday') })
-                ),
+                sign: leadDelta,
+                label: `${leadDelta >= 0 ? "+" : ""}${leadDelta} vs yesterday`,
               }}
             />
+
             <MetricCard
-              title={t('newContactsToday')}
-              value={metrics.newContactsToday.current.toLocaleString()}
-              icon={UserPlus}
-              delta={{
-                sign:
-                  metrics.newContactsToday.current - metrics.newContactsToday.previous,
-                label: deltaLabel(
-                  metrics.newContactsToday.current - metrics.newContactsToday.previous,
-                  t('vsYesterday'),
-                  t('noChange', { suffix: t('vsYesterday') })
-                ),
-              }}
+              title="Won Conversions"
+              value={data.wonDealsCount.toLocaleString()}
+              icon={Trophy}
+              subtitle={`Total Revenue: ${formatCurrency(data.wonDealsValue, defaultCurrency)}`}
             />
+
             <MetricCard
-              title={t('openDealsValue')}
-              value={formatCurrency(metrics.openDealsValue, defaultCurrency)}
-              icon={DollarSign}
-              subtitle={t('openDeals', { count: metrics.openDealsCount })}
+              title="Lost / Dropped"
+              value={data.lostDealsCount.toLocaleString()}
+              icon={XCircle}
+              subtitle="Unconverted opportunities"
             />
+
             <MetricCard
-              title={t('messagesSentToday')}
-              value={metrics.messagesSentToday.current.toLocaleString()}
-              icon={Send}
-              delta={{
-                sign:
-                  metrics.messagesSentToday.current - metrics.messagesSentToday.previous,
-                label: deltaLabel(
-                  metrics.messagesSentToday.current - metrics.messagesSentToday.previous,
-                  t('vsYesterday'),
-                  t('noChange', { suffix: t('vsYesterday') })
-                ),
-              }}
+              title="Conversion Rate"
+              value={`${data.conversionRate}%`}
+              icon={Percent}
+              subtitle={`${data.openDealsCount} active deals in pipeline`}
             />
           </>
         )}
       </div>
 
-      {/* Quick actions */}
-      <QuickActions />
+      {/* Main Grid: Pipeline Funnel + Live Activities */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        {/* Pipeline Stage Breakdown */}
+        <div className="rounded-2xl border border-border bg-card p-5 lg:col-span-3 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="size-5 text-primary" />
+              <h2 className="text-base font-semibold text-foreground">
+                Pipeline Funnel & Lead Flow
+              </h2>
+            </div>
+            <Link
+              href="/pipelines"
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              Manage Stages <ArrowRight className="size-3" />
+            </Link>
+          </div>
 
-      {/* Charts row */}
-      {/* items-stretch (the grid default) stretches the two columns to
-          match the tallest sibling; adding h-full on each wrapper and
-          on the inner panels makes both cards actually fill that
-          stretched height so their rounded borders line up. Without
-          this, the pipeline card rendered at its natural (shorter)
-          height while the line chart drove the row height. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-        <div className="h-full lg:col-span-3">
-          <ConversationsChart
-            series={series}
-            loading={seriesLoading}
-            range={range}
-            onRangeChange={handleRangeChange}
-          />
+          <p className="text-xs text-muted-foreground">
+            Distribution of leads and monetary deal value across your pipeline stages.
+          </p>
+
+          <div className="space-y-3 pt-2">
+            {loading || !data ? (
+              <div className="py-8 text-center text-xs text-muted-foreground">Loading funnel...</div>
+            ) : data.stages.length === 0 ? (
+              <div className="py-8 text-center text-xs text-muted-foreground">No pipeline stages found.</div>
+            ) : (
+              data.stages.map((stage) => {
+                const maxCount = Math.max(...data.stages.map((s) => s.count), 1);
+                const percent = Math.round((stage.count / maxCount) * 100);
+
+                return (
+                  <div key={stage.id} className="space-y-1.5 rounded-xl border border-border/50 bg-muted/20 p-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{ backgroundColor: stage.color }}
+                        />
+                        <span className="font-semibold text-foreground">{stage.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-foreground">
+                          {stage.count} {stage.count === 1 ? "lead" : "leads"}
+                        </span>
+                        <span className="font-mono text-muted-foreground">
+                          {formatCurrency(stage.value, defaultCurrency)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.max(percent, 4)}%`,
+                          backgroundColor: stage.color || "#10b981",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-        <div className="h-full lg:col-span-2">
-          <PipelineDonut
-            data={pipeline}
-            loading={pipelineLoading}
-            currency={defaultCurrency}
-          />
+
+        {/* Recent CRM Activities & Conversions */}
+        <div className="rounded-2xl border border-border bg-card p-5 lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="size-5 text-primary" />
+              <h2 className="text-base font-semibold text-foreground">
+                Recent CRM Events
+              </h2>
+            </div>
+            <Link
+              href="/pipelines?view=schedule"
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              Schedule <ArrowRight className="size-3" />
+            </Link>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Live log of follow-ups, calls, and conversions logged from WhatsApp Web.
+          </p>
+
+          <div className="space-y-2.5 pt-2">
+            {loading || !data ? (
+              <div className="py-8 text-center text-xs text-muted-foreground">Loading activities...</div>
+            ) : data.recentActivities.length === 0 ? (
+              <div className="py-8 text-center text-xs text-muted-foreground">
+                No activities logged yet. Select any contact in WhatsApp Web to schedule follow-ups.
+              </div>
+            ) : (
+              data.recentActivities.map((act) => (
+                <div
+                  key={act.id}
+                  className="flex items-start gap-3 rounded-xl border border-border/50 bg-muted/20 p-3 text-xs"
+                >
+                  <div className="mt-0.5 rounded-lg bg-primary/10 p-1.5 text-primary">
+                    {act.type === "call" ? (
+                      <Phone className="size-3.5" />
+                    ) : act.type === "meeting" ? (
+                      <Calendar className="size-3.5" />
+                    ) : (
+                      <MessageSquare className="size-3.5" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-0.5 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-semibold text-foreground truncate">
+                        {act.title}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        {new Date(act.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      Contact: {act.contact_name}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Response time */}
-      <ResponseTimeChart data={responseTime} loading={responseTimeLoading} />
-
-      {/* Activity feed */}
-      <ActivityFeed items={activity} loading={activityLoading} />
     </div>
-  )
-}
-
-// ------------------------------------------------------------
-
-function deltaLabel(delta: number, suffix: string, noChangeLabel: string): string {
-  if (delta === 0) return noChangeLabel
-  const sign = delta > 0 ? '+' : ''
-  return `${sign}${delta.toLocaleString()} ${suffix}`
+  );
 }

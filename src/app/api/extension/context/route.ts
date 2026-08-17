@@ -37,31 +37,35 @@ export async function GET(request: Request) {
     const phone = cleanPhone(rawPhone);
     const contactName = rawName.trim() || (phone ? `WhatsApp Contact (${phone.slice(-4)})` : "WhatsApp Contact");
 
-    // Fetch active pipeline stages for account
-    const { data: stages } = await supabase
+    // Fetch stages in parallel
+    const stagesPromise = supabase
       .from("pipeline_stages")
-      .select("*")
+      .select("id, name, color, position")
       .eq("account_id", accountId)
       .order("position", { ascending: true });
 
-    // If no phone or name was specified (e.g. extension loaded without active chat)
+    // If no contact specified (e.g. extension initially mounted without active chat)
     if (!phone && !rawName) {
-      return NextResponse.json({
-        success: true,
-        account_id: accountId,
-        contact: null,
-        deal: null,
-        stages: stages || [],
-        activities: [],
-      }, { headers: corsHeaders() });
+      const { data: stages } = await stagesPromise;
+      return NextResponse.json(
+        {
+          success: true,
+          account_id: accountId,
+          contact: null,
+          deal: null,
+          stages: stages || [],
+          activities: [],
+        },
+        { headers: corsHeaders() }
+      );
     }
 
-    // Find contact by phone or name
+    // Lookup contact fast
     let contact = null;
     if (phone && phone.length >= 7) {
       const { data: contacts } = await supabase
         .from("contacts")
-        .select("*, tags:contact_tags(tags(*))")
+        .select("id, name, phone, email")
         .eq("account_id", accountId)
         .or(`phone.eq.${phone},phone.ilike.%${phone.slice(-10)}%`)
         .limit(1);
@@ -71,67 +75,67 @@ export async function GET(request: Request) {
     if (!contact && rawName) {
       const { data: nameContacts } = await supabase
         .from("contacts")
-        .select("*, tags:contact_tags(tags(*))")
+        .select("id, name, phone, email")
         .eq("account_id", accountId)
         .ilike("name", `%${rawName}%`)
         .limit(1);
       if (nameContacts && nameContacts.length > 0) contact = nameContacts[0];
     }
 
-    // Auto-create contact if not found yet
+    // Auto-create contact if not found
     if (!contact) {
-      const { data: newContact, error: createErr } = await supabase
+      const { data: newContact } = await supabase
         .from("contacts")
         .insert({
           account_id: accountId,
-          phone: phone || rawName.replace(/[^a-zA-Z0-9]/g, "").toLowerCase() || `wa_${Date.now()}`,
+          phone: phone || `wa_${Date.now()}`,
           name: contactName,
         })
-        .select()
+        .select("id, name, phone, email")
         .single();
-
-      if (!createErr && newContact) {
-        contact = newContact;
-      }
+      if (newContact) contact = newContact;
     }
 
-    // Fetch active deal for contact
-    let deal = null;
-    if (contact) {
-      const { data: deals } = await supabase
-        .from("deals")
-        .select("*, stage:pipeline_stages(*)")
-        .eq("account_id", accountId)
-        .eq("contact_id", contact.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
+    const [stagesRes, dealsRes] = await Promise.all([
+      stagesPromise,
+      contact
+        ? supabase
+            .from("deals")
+            .select("id, title, value, currency, status, stage_id, created_at, won_at, lost_at")
+            .eq("account_id", accountId)
+            .eq("contact_id", contact.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+        : Promise.resolve({ data: [] }),
+    ]);
 
-      if (deals && deals.length > 0) {
-        deal = deals[0];
-      }
-    }
+    const stages = stagesRes.data || [];
+    let deal = dealsRes.data && dealsRes.data.length > 0 ? dealsRes.data[0] : null;
 
-    // Fetch recent activities & notes
-    let activities = [];
+    // Fetch activities for deal or contact
+    let activities: any[] = [];
     if (deal) {
       const { data: acts } = await supabase
         .from("crm_activities")
-        .select("*")
+        .select("id, type, title, description, scheduled_at, status, created_at")
         .eq("account_id", accountId)
         .eq("deal_id", deal.id)
         .order("created_at", { ascending: false })
-        .limit(15);
+        .limit(10);
       activities = acts || [];
     }
 
-    return NextResponse.json({
-      success: true,
-      account_id: accountId,
-      contact: contact,
-      deal: deal,
-      stages: stages || [],
-      activities: activities,
-    }, { headers: corsHeaders() });
+    return NextResponse.json(
+      {
+        success: true,
+        account_id: accountId,
+        contact: contact,
+        deal: deal,
+        stages: stages,
+        activities: activities,
+      },
+      { headers: corsHeaders() }
+    );
   } catch (err) {
     console.error("Extension Context API Error:", err);
     return NextResponse.json(
