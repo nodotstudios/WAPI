@@ -6,6 +6,18 @@ function cleanPhone(raw: string): string {
   return raw.replace(/\D/g, "");
 }
 
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+  };
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -13,22 +25,24 @@ export async function GET(request: Request) {
     const phone = cleanPhone(rawPhone);
 
     if (!phone) {
-      return NextResponse.json({ error: "phone parameter is required" }, { status: 400 });
+      return NextResponse.json({ error: "phone parameter is required" }, { status: 400, headers: corsHeaders() });
     }
 
     // Authenticate via API key or session
     let accountId: string | null = null;
+    let userId: string | null = null;
     let supabase = await createClient();
 
     try {
       const apiKeyCtx = await requireApiKey(request, "contacts:read");
       accountId = apiKeyCtx.accountId;
       supabase = apiKeyCtx.supabase;
+      userId = apiKeyCtx.createdBy;
     } catch {
       // Fallback to active Auth Session if logged in via web browser session
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401 });
+        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401, headers: corsHeaders() });
       }
       const { data: profile } = await supabase
         .from("profiles")
@@ -36,13 +50,22 @@ export async function GET(request: Request) {
         .eq("id", user.id)
         .single();
       if (!profile) {
-        return NextResponse.json({ error: "Account not found" }, { status: 404 });
+        return NextResponse.json({ error: "Account not found" }, { status: 404, headers: corsHeaders() });
       }
       accountId = profile.account_id;
+      userId = user.id;
     }
 
     if (!accountId) {
-      return NextResponse.json({ error: "Account ID not found" }, { status: 404 });
+      return NextResponse.json({ error: "Account ID not found" }, { status: 404, headers: corsHeaders() });
+    }
+
+    // Update presence for team member using extension
+    if (userId) {
+      void supabase
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", userId);
     }
 
     // Find contact by phone (ends_with or exact digits)
@@ -123,12 +146,12 @@ export async function GET(request: Request) {
       deal: deal,
       stages: stages || [],
       activities: activities,
-    });
+    }, { headers: corsHeaders() });
   } catch (err) {
     console.error("Extension Context API Error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal server error" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders() }
     );
   }
 }

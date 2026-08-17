@@ -3,6 +3,18 @@ import { requireApiKey } from "@/lib/auth/api-context";
 import { createClient } from "@/lib/supabase/server";
 import { sendMetaConversionEvent } from "@/lib/meta/conversions-api";
 
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+  };
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
+}
+
 export async function POST(request: Request) {
   try {
     let accountId: string | null = null;
@@ -15,7 +27,7 @@ export async function POST(request: Request) {
     } catch {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401 });
+        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401, headers: corsHeaders() });
       }
       const { data: profile } = await supabase
         .from("profiles")
@@ -133,12 +145,12 @@ export async function POST(request: Request) {
       success: true,
       deal: updatedDeal,
       capiSent,
-    });
+    }, { headers: corsHeaders() });
   } catch (err) {
     console.error("Extension Deal API Error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal server error" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders() }
     );
   }
 }

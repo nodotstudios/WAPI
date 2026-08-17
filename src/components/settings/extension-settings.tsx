@@ -1,41 +1,77 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PlugZap, Download, KeyRound, Check, Copy, ExternalLink, ShieldCheck } from "lucide-react";
+import { PlugZap, Download, KeyRound, Check, Copy, ShieldCheck, Trash2, UserCheck, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+
+interface TeamMember {
+  id: string;
+  name?: string;
+  email?: string;
+  user_id?: string;
+  last_seen_at?: string;
+}
+
+interface ApiKeyRow {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  revoked_at?: string | null;
+  last_used_at?: string | null;
+}
 
 export function ExtensionSettings() {
   const [generating, setGenerating] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [existingKeys, setExistingKeys] = useState<Array<{ id: string; name: string; key_prefix: string; created_at: string }>>([]);
+  const [existingKeys, setExistingKeys] = useState<ApiKeyRow[]>([]);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [selectedMember, setSelectedMember] = useState<string>("");
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
-  const loadKeys = async () => {
+  const loadData = async () => {
     try {
-      const res = await fetch("/api/account/api-keys", { cache: "no-store" });
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.keys)) {
-        setExistingKeys(data.keys);
+      const [keysRes, membersRes] = await Promise.all([
+        fetch("/api/account/api-keys", { cache: "no-store" }),
+        fetch("/api/account/members", { cache: "no-store" }),
+      ]);
+
+      if (keysRes.ok) {
+        const keysData = await keysRes.json();
+        if (Array.isArray(keysData.keys)) {
+          setExistingKeys(keysData.keys.filter((k: ApiKeyRow) => !k.revoked_at));
+        }
       }
-    } catch {
-      // Silent catch
+
+      if (membersRes.ok) {
+        const membersData = await membersRes.json();
+        if (Array.isArray(membersData.members)) {
+          setMembers(membersData.members);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load settings data:", err);
     }
   };
 
   useEffect(() => {
-    loadKeys();
+    loadData();
   }, []);
 
   const handleGenerateKey = async () => {
     setGenerating(true);
     try {
+      const targetMember = members.find((m) => m.id === selectedMember || m.user_id === selectedMember);
+      const memberName = targetMember?.name || targetMember?.email || "Team Member";
+
       const res = await fetch("/api/account/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: `Extension Key (${new Date().toLocaleDateString()})`,
+          name: `WhatsApp Extension Key (${memberName})`,
           scopes: ["contacts:read", "contacts:write", "conversations:read", "messages:send", "messages:read"],
         }),
       });
@@ -46,15 +82,34 @@ export function ExtensionSettings() {
         return;
       }
 
-      // Extract the plaintext string key
-      const keyString = typeof data.plaintext === "string" ? data.plaintext : (typeof data.key === "string" ? data.key : "");
+      const keyString = typeof data.plaintext === "string" ? data.plaintext : "";
       setCreatedKey(keyString);
-      toast.success("Team Member API Key generated successfully!");
-      loadKeys();
+      toast.success(`Extension API key created for ${memberName}!`);
+      loadData();
     } catch {
       toast.error("Failed to generate API Key");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleRevokeKey = async (id: string) => {
+    if (!confirm("Are you sure you want to revoke and remove this API key?")) return;
+    setRevokingId(id);
+    try {
+      const res = await fetch(`/api/account/api-keys/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("API Key revoked and removed!");
+        setExistingKeys((prev) => prev.filter((k) => k.id !== id));
+      } else {
+        toast.error("Failed to revoke key");
+      }
+    } catch {
+      toast.error("Failed to revoke key");
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -63,6 +118,12 @@ export function ExtensionSettings() {
     setCopied(true);
     toast.success("API Key copied to clipboard!");
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const isMemberOnline = (lastSeen?: string) => {
+    if (!lastSeen) return false;
+    const diff = (Date.now() - new Date(lastSeen).getTime()) / 1000 / 60;
+    return diff < 10; // Online if active in last 10 minutes
   };
 
   return (
@@ -135,7 +196,7 @@ export function ExtensionSettings() {
             </span>
             <h4 className="text-xs font-semibold text-foreground">Open WhatsApp Web</h4>
             <p className="text-[11px] text-muted-foreground">
-              Go to <code className="text-primary">web.whatsapp.com</code>, click ⚙️ in the WAPI side panel, and paste your Team API Key below.
+              Go to <code className="text-primary">web.whatsapp.com</code>, click ⚙️ in the WAPI side panel, and paste your assigned Team Key below.
             </p>
           </div>
         </div>
@@ -143,24 +204,39 @@ export function ExtensionSettings() {
 
       {/* Multi-User Connection API Key Generator */}
       <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <KeyRound className="size-4 text-primary" />
-              Team Member Connection Keys (3–4 Users)
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Generate API keys for your team members so each user's WhatsApp Web side panel connects to your shared WAPI CRM database.
-            </p>
+        <div>
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <KeyRound className="size-4 text-primary" />
+            Team Member Key Management (User-by-User)
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Assign keys specifically to team members. When a team member uses their key in WhatsApp Web, WAPI tracks their real-time online status.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex-1">
+            <select
+              value={selectedMember}
+              onChange={(e) => setSelectedMember(e.target.value)}
+              className="w-full h-9 rounded-xl border border-input bg-background px-3 text-xs text-foreground outline-none focus:border-primary"
+            >
+              <option value="">-- Select Team Member --</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name || m.email || "Team Member"} {isMemberOnline(m.last_seen_at) ? "(🟢 Online)" : "(⚪ Offline)"}
+                </option>
+              ))}
+            </select>
           </div>
 
           <Button
             size="sm"
             onClick={handleGenerateKey}
             disabled={generating}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 h-9"
           >
-            {generating ? "Generating..." : "+ Generate Team Key"}
+            {generating ? "Generating..." : "+ Create Member Key"}
           </Button>
         </div>
 
@@ -189,20 +265,39 @@ export function ExtensionSettings() {
           </div>
         )}
 
-        {/* Existing Keys Table */}
+        {/* Existing Active Keys Roster */}
         {existingKeys.length > 0 && (
-          <div className="space-y-2 pt-2 border-t border-border/60">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Team Keys</h4>
-            <div className="space-y-1.5">
+          <div className="space-y-2 pt-3 border-t border-border/60">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Team Keys Roster</h4>
+            <div className="space-y-2">
               {existingKeys.map((k) => (
-                <div key={k.id} className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs">
-                  <div>
-                    <span className="font-semibold text-foreground">{k.name}</span>
-                    <span className="ml-2 font-mono text-[11px] text-muted-foreground">({k.key_prefix}…)</span>
+                <div key={k.id} className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 p-3 text-xs">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-foreground">{k.name}</span>
+                      <span className="font-mono text-[11px] text-muted-foreground">({k.key_prefix}…)</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                      <span>Created: {new Date(k.created_at).toLocaleDateString()}</span>
+                      {k.last_used_at && (
+                        <span className="text-emerald-400 flex items-center gap-1">
+                          <Circle className="size-2 fill-emerald-400 text-emerald-400" />
+                          Last used {new Date(k.last_used_at).toLocaleTimeString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    Created {new Date(k.created_at).toLocaleDateString()}
-                  </span>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={revokingId === k.id}
+                    onClick={() => handleRevokeKey(k.id)}
+                    className="h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5 mr-1" />
+                    {revokingId === k.id ? "Revoking..." : "Revoke Key"}
+                  </Button>
                 </div>
               ))}
             </div>

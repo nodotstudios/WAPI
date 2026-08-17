@@ -57,7 +57,7 @@ export interface ApiKeyContext {
  * bare key) but requires the value to look like one of our keys.
  */
 function extractKey(request: Request): string | null {
-  const header = request.headers.get('authorization');
+  const header = request.headers.get('authorization') || request.headers.get('x-api-key');
   if (!header) return null;
   const value = header.startsWith('Bearer ')
     ? header.slice('Bearer '.length).trim()

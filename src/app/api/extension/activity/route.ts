@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import { requireApiKey } from "@/lib/auth/api-context";
 import { createClient } from "@/lib/supabase/server";
 
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+  };
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
+}
+
 export async function POST(request: Request) {
   try {
     let accountId: string | null = null;
@@ -14,7 +26,7 @@ export async function POST(request: Request) {
     } catch {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401 });
+        return NextResponse.json({ error: "Unauthorized. Please provide a valid API Key." }, { status: 401, headers: corsHeaders() });
       }
       const { data: profile } = await supabase
         .from("profiles")
@@ -22,24 +34,24 @@ export async function POST(request: Request) {
         .eq("id", user.id)
         .single();
       if (!profile) {
-        return NextResponse.json({ error: "Account not found" }, { status: 404 });
+        return NextResponse.json({ error: "Account not found" }, { status: 404, headers: corsHeaders() });
       }
       accountId = profile.account_id;
     }
 
     if (!accountId) {
-      return NextResponse.json({ error: "Account ID not found" }, { status: 404 });
+      return NextResponse.json({ error: "Account ID not found" }, { status: 404, headers: corsHeaders() });
     }
 
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders() });
     }
 
     const { deal_id, contact_id, type, title, description, scheduled_at } = body;
 
     if (!type || !title) {
-      return NextResponse.json({ error: "type and title are required" }, { status: 400 });
+      return NextResponse.json({ error: "type and title are required" }, { status: 400, headers: corsHeaders() });
     }
 
     const { data: activity, error: err } = await supabase
@@ -59,18 +71,18 @@ export async function POST(request: Request) {
       .single();
 
     if (err) {
-      return NextResponse.json({ error: err.message }, { status: 500 });
+      return NextResponse.json({ error: err.message }, { status: 500, headers: corsHeaders() });
     }
 
     return NextResponse.json({
       success: true,
       activity,
-    });
+    }, { headers: corsHeaders() });
   } catch (err) {
     console.error("Extension Activity API Error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal server error" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders() }
     );
   }
 }
