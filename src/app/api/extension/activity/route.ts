@@ -4,6 +4,10 @@ import { createCrmActivity } from "@/lib/crm/activities";
 import { createGoogleCalendarEvent } from "@/lib/google/calendar";
 import { supabaseAdmin } from "@/lib/flows/admin-client";
 
+function cleanPhone(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -34,10 +38,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders() });
     }
 
-    let { deal_id, contact_id, type, title, description, scheduled_at } = body;
+    let { deal_id, contact_id, phone: rawPhone, name: rawName, type, title, description, scheduled_at } = body;
 
     if (!title) {
       title = "Scheduled Follow-up";
+    }
+
+    // Auto-resolve or create contact if missing
+    let finalContactId = contact_id;
+    if (!finalContactId && (rawPhone || rawName)) {
+      const phone = rawPhone ? cleanPhone(rawPhone) : "";
+      const contactName = (rawName || "").trim() || (phone ? `WhatsApp Contact (${phone.slice(-4)})` : "WhatsApp Contact");
+
+      if (phone && phone.length >= 7) {
+        const { data: existingContacts } = await supabase
+          .from("contacts")
+          .select("id")
+          .eq("account_id", accountId)
+          .or(`phone.eq.${phone},phone.ilike.%${phone.slice(-10)}%`)
+          .limit(1);
+        if (existingContacts && existingContacts.length > 0) {
+          finalContactId = existingContacts[0].id;
+        }
+      }
+
+      if (!finalContactId) {
+        const { data: newContact } = await supabase
+          .from("contacts")
+          .insert({
+            account_id: accountId,
+            phone: phone || `wa_${Date.now()}`,
+            name: contactName,
+          })
+          .select("id")
+          .single();
+        if (newContact) finalContactId = newContact.id;
+      }
     }
 
     // Normalize type to valid DB enum values ('call', 'meeting', 'google_meet', 'email', 'note', 'follow_up', 'task', 'stage_change')
@@ -96,7 +132,7 @@ export async function POST(request: Request) {
       accountId,
       userId: finalUserId,
       dealId: deal_id || null,
-      contactId: contact_id || null,
+      contactId: finalContactId || null,
       type: normalizedType,
       title: title.trim(),
       description: description || null,

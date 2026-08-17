@@ -3,6 +3,10 @@ import { authenticateExtensionRequest } from "@/lib/auth/extension-auth";
 import { supabaseAdmin } from "@/lib/flows/admin-client";
 import { sendMetaConversionEvent } from "@/lib/meta/conversions-api";
 
+function cleanPhone(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -61,7 +65,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders() });
     }
 
-    const { deal_id, contact_id, stage_id, title, value, currency, status, won_reason, lost_reason, action } = body;
+    const { deal_id, contact_id, phone: rawPhone, name: rawName, stage_id, title, value, currency, status, won_reason, lost_reason, action } = body;
 
     // Handle delete action via POST
     if (action === "delete" && deal_id) {
@@ -89,8 +93,59 @@ export async function POST(request: Request) {
     }
 
     if (!targetDealId) {
-      if (!contact_id) {
-        return NextResponse.json({ error: "contact_id is required to create a new offer" }, { status: 400, headers: corsHeaders() });
+      let finalContactId = contact_id;
+
+      // Auto-resolve or create contact if not provided
+      if (!finalContactId) {
+        const phone = rawPhone ? cleanPhone(rawPhone) : "";
+        const contactName = (rawName || "").trim() || (phone ? `WhatsApp Contact (${phone.slice(-4)})` : "WhatsApp Contact");
+
+        if (phone && phone.length >= 7) {
+          const { data: existingContacts } = await supabase
+            .from("contacts")
+            .select("id")
+            .eq("account_id", accountId)
+            .or(`phone.eq.${phone},phone.ilike.%${phone.slice(-10)}%`)
+            .limit(1);
+          if (existingContacts && existingContacts.length > 0) {
+            finalContactId = existingContacts[0].id;
+          }
+        }
+
+        if (!finalContactId && rawName) {
+          const { data: nameContacts } = await supabase
+            .from("contacts")
+            .select("id")
+            .eq("account_id", accountId)
+            .ilike("name", `%${rawName}%`)
+            .limit(1);
+          if (nameContacts && nameContacts.length > 0) {
+            finalContactId = nameContacts[0].id;
+          }
+        }
+
+        // Create new contact row
+        if (!finalContactId) {
+          const { data: newContact, error: createContactErr } = await supabase
+            .from("contacts")
+            .insert({
+              account_id: accountId,
+              phone: phone || `wa_${Date.now()}`,
+              name: contactName,
+            })
+            .select("id")
+            .single();
+
+          if (newContact) {
+            finalContactId = newContact.id;
+          } else {
+            console.error("Auto contact creation error:", createContactErr);
+          }
+        }
+      }
+
+      if (!finalContactId) {
+        return NextResponse.json({ error: "Could not associate lead with a valid contact." }, { status: 400, headers: corsHeaders() });
       }
 
       // Fetch default pipeline for account
@@ -126,7 +181,7 @@ export async function POST(request: Request) {
           account_id: accountId,
           user_id: finalUserId,
           pipeline_id: pipelineId,
-          contact_id: contact_id,
+          contact_id: finalContactId,
           title: title ? title.trim() : "New Offer / Lead",
           stage_id: finalStageId,
           value: parseFloat(value) || 0,
