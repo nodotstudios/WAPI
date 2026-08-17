@@ -1,16 +1,17 @@
 /**
  * WAPI CRM Extension Content Script
  * Injected into https://web.whatsapp.com
+ * Blazing Fast 0ms Click & Mutation Detection
  */
 
 (function () {
-  console.log("[WAPI Extension] Content script initialized on WhatsApp Web");
+  console.log("[WAPI Extension] Fast content script initialized on WhatsApp Web");
 
   let activePhone = null;
   let panelIframe = null;
   let toggleBtn = null;
   let panelVisible = true;
-  let observerDebounce = null;
+  let debounceTimer = null;
 
   // Create & Inject Floating Toggle Button
   function injectToggleButton() {
@@ -52,7 +53,7 @@
       const header = document.querySelector("#main header");
       if (!header) return { phone: null, name: null };
 
-      // Try finding title or contact text
+      // 1. Try finding title or contact text in header
       const titleEl = header.querySelector("span[title]") || header.querySelector("div[role='button'] span");
       const titleText = (titleEl?.getAttribute("title") || titleEl?.textContent || "").trim();
       const titleDigits = titleText.replace(/\D/g, "");
@@ -60,7 +61,7 @@
       let phone = titleDigits.length >= 7 ? titleDigits : null;
       let name = titleDigits.length >= 7 ? null : titleText;
 
-      // Check subtext or phone attributes in chat header for secondary digits
+      // 2. Check subtext or phone attributes in chat header
       if (!phone) {
         const subtextEl = header.querySelector("span.selectable-text") || header.querySelector("span[dir='auto']");
         if (subtextEl) {
@@ -88,21 +89,35 @@
     );
   }
 
-  // Monitor DOM for conversation switches with debouncing
+  function checkAndNotify() {
+    const contact = extractActiveContact();
+    const currentId = contact.phone || contact.name;
+    if (currentId && currentId !== activePhone) {
+      activePhone = currentId;
+      notifyPanel(contact);
+    }
+  }
+
+  // Fast direct click listener on WhatsApp chat list
+  function setupChatClickListeners() {
+    document.addEventListener("click", (e) => {
+      // If clicked inside chat list or main container, check immediately
+      if (e.target.closest("#pane-side") || e.target.closest("div[role='listitem']")) {
+        setTimeout(checkAndNotify, 50);
+        setTimeout(checkAndNotify, 250);
+      }
+    }, true);
+  }
+
+  // Lightweight MutationObserver targeted specifically on #main
   function observeChatHeader() {
     const observer = new MutationObserver(() => {
-      if (observerDebounce) clearTimeout(observerDebounce);
-      observerDebounce = setTimeout(() => {
-        const contact = extractActiveContact();
-        const currentId = contact.phone || contact.name;
-        if (currentId && currentId !== activePhone) {
-          activePhone = currentId;
-          notifyPanel(contact);
-        }
-      }, 150);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(checkAndNotify, 100);
     });
 
-    observer.observe(document.body, {
+    const target = document.getElementById("main") || document.body;
+    observer.observe(target, {
       childList: true,
       subtree: true,
     });
@@ -112,7 +127,10 @@
   window.addEventListener("message", (event) => {
     if (event.data && event.data.type === "WAPI_REQUEST_ACTIVE_PHONE") {
       const contact = extractActiveContact();
-      notifyPanel(contact);
+      if (contact.phone || contact.name) {
+        activePhone = contact.phone || contact.name;
+        notifyPanel(contact);
+      }
     }
   });
 
@@ -120,14 +138,9 @@
   function init() {
     injectToggleButton();
     injectSidePanel();
+    setupChatClickListeners();
     observeChatHeader();
-    setTimeout(() => {
-      const contact = extractActiveContact();
-      if (contact.phone || contact.name) {
-        activePhone = contact.phone || contact.name;
-        notifyPanel(contact);
-      }
-    }, 1000);
+    setTimeout(checkAndNotify, 1000);
   }
 
   if (document.readyState === "loading") {

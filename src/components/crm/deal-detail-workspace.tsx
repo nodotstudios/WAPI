@@ -43,6 +43,7 @@ interface DealDetailWorkspaceProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   dealId: string | null;
+  initialDeal?: Deal | null;
   stages: PipelineStage[];
   onDealUpdated: () => void;
 }
@@ -51,12 +52,13 @@ export function DealDetailWorkspace({
   open,
   onOpenChange,
   dealId,
+  initialDeal,
   stages,
   onDealUpdated,
 }: DealDetailWorkspaceProps) {
-  const [deal, setDeal] = useState<Deal | null>(null);
+  const [deal, setDeal] = useState<Deal | null>(initialDeal || null);
   const [activities, setActivities] = useState<CrmActivity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialDeal);
   const [activeTab, setActiveTab] = useState<"timeline" | "scope" | "contact">("timeline");
   const [newNoteText, setNewNoteText] = useState("");
   const [addingNote, setAddingNote] = useState(false);
@@ -70,17 +72,27 @@ export function DealDetailWorkspace({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Sync initialDeal instantly when drawer opens
+  useEffect(() => {
+    if (initialDeal) {
+      setDeal(initialDeal);
+      setLoading(false);
+    }
+  }, [initialDeal]);
+
   const loadDealAndTimeline = useCallback(async () => {
     if (!dealId) return;
-    setLoading(true);
+    if (!initialDeal && !deal) {
+      setLoading(true);
+    }
     try {
       const supabase = createClient();
       const [dealRes, actRes] = await Promise.all([
         supabase
           .from("deals")
-          .select("*, contact:contacts(*), stage:pipeline_stages(*), assignee:profiles!deals_assigned_to_fkey(*)")
+          .select("*, contact:contacts(*), stage:pipeline_stages(*)")
           .eq("id", dealId)
-          .single(),
+          .maybeSingle(),
         fetch(`/api/crm/activities?deal_id=${dealId}&limit=50`, { cache: "no-store" }),
       ]);
 
@@ -91,10 +103,12 @@ export function DealDetailWorkspace({
       if (actRes.ok && Array.isArray(actData.activities)) {
         setActivities(actData.activities);
       }
+    } catch (err) {
+      console.error("Failed to load deal timeline:", err);
     } finally {
       setLoading(false);
     }
-  }, [dealId]);
+  }, [dealId, initialDeal, deal]);
 
   useEffect(() => {
     if (open && dealId) {

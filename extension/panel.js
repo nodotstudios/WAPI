@@ -239,6 +239,14 @@ async function fetchCrmContext(phone, name) {
     cName.textContent = currentName || `Contact (${currentPhone.slice(-4)})`;
     cPhone.textContent = currentPhone || "Syncing...";
     cAvatar.textContent = (currentName || currentPhone || "C").charAt(0).toUpperCase();
+
+    // Immediately clear previous offers to prevent showing stale client data
+    offersList.innerHTML = `
+      <div style="color: #94a3b8; font-size: 11px; padding: 12px 0; text-align: center;">
+        <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 4px;">⚡</span>
+        Syncing client offers...
+      </div>
+    `;
   }
 
   if (fetchAbortController) {

@@ -1,6 +1,6 @@
 /**
  * WAPI Extension Side-Panel Controller
- * Native Email & Password Session Auth + Fast CRM Workspace
+ * Native Email & Password Session Auth + Multi-Offer Sales CRM
  */
 
 let serverUrl = "https://wapi-blond.vercel.app";
@@ -10,7 +10,7 @@ let currentUser = null;
 let currentPhone = "";
 let currentName = "";
 let currentContact = null;
-let currentDeal = null;
+let currentDeals = [];
 let stagesList = [];
 let fetchAbortController = null;
 
@@ -32,16 +32,21 @@ const cAvatar = document.getElementById("c-avatar");
 const cName = document.getElementById("c-name");
 const cPhone = document.getElementById("c-phone");
 
-const dealTitle = document.getElementById("deal-title");
-const dealStatus = document.getElementById("deal-status");
-const stageSelect = document.getElementById("stage-select");
-const dealValueInput = document.getElementById("deal-value");
-const dealCurrencySelect = document.getElementById("deal-currency");
+// DOM Elements - New Offer Creator
+const btnToggleNewOffer = document.getElementById("btn-toggle-new-offer");
+const newOfferBox = document.getElementById("new-offer-box");
+const newOfferTitle = document.getElementById("new-offer-title");
+const newOfferValue = document.getElementById("new-offer-value");
+const newOfferCurrency = document.getElementById("new-offer-currency");
+const newOfferStage = document.getElementById("new-offer-stage");
+const btnSaveNewOffer = document.getElementById("btn-save-new-offer");
+const btnCancelNewOffer = document.getElementById("btn-cancel-new-offer");
 
-const btnSaveDeal = document.getElementById("btn-save-deal");
-const btnMarkWon = document.getElementById("btn-mark-won");
+const offersList = document.getElementById("offers-list");
 
+// DOM Elements - Schedule Activity
 const fuChannel = document.getElementById("fu-channel");
+const fuDealSelect = document.getElementById("fu-deal-select");
 const fuTime = document.getElementById("fu-time");
 const fuTitle = document.getElementById("fu-title");
 const btnSaveFollowup = document.getElementById("btn-save-followup");
@@ -127,7 +132,6 @@ btnLogin.addEventListener("click", async () => {
     authToken = data.token;
     currentUser = data.user;
 
-    // Save to storage
     if (chrome.storage && chrome.storage.local) {
       chrome.storage.local.set({
         wapiAuthToken: authToken,
@@ -153,13 +157,74 @@ btnLogout.addEventListener("click", () => {
   authToken = "";
   currentUser = null;
   currentContact = null;
-  currentDeal = null;
+  currentDeals = [];
 
   if (chrome.storage && chrome.storage.local) {
     chrome.storage.local.remove(["wapiAuthToken", "wapiUser"]);
   }
 
   renderView(false);
+});
+
+// Toggle New Offer Creator Box
+btnToggleNewOffer.addEventListener("click", () => {
+  if (!currentContact) return;
+  const isVisible = newOfferBox.style.display === "block";
+  newOfferBox.style.display = isVisible ? "none" : "block";
+  if (!isVisible) {
+    newOfferTitle.focus();
+  }
+});
+
+btnCancelNewOffer.addEventListener("click", () => {
+  newOfferBox.style.display = "none";
+  newOfferTitle.value = "";
+  newOfferValue.value = "0";
+});
+
+// Create New Lead / Offer
+btnSaveNewOffer.addEventListener("click", async () => {
+  if (!currentContact || !authToken) return;
+
+  const title = newOfferTitle.value.trim() || "New Client Offer";
+  const value = parseFloat(newOfferValue.value) || 0;
+  const currency = newOfferCurrency.value || "USD";
+  const stage_id = newOfferStage.value || (stagesList[0]?.id ?? undefined);
+
+  btnSaveNewOffer.textContent = "Creating...";
+  btnSaveNewOffer.disabled = true;
+
+  try {
+    const res = await fetch(`${serverUrl}/api/extension/deal`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        contact_id: currentContact.id,
+        title,
+        value,
+        currency,
+        stage_id,
+        status: "open",
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to create deal");
+    }
+
+    newOfferBox.style.display = "none";
+    newOfferTitle.value = "";
+    newOfferValue.value = "0";
+
+    // Refresh context immediately
+    await fetchCrmContext(currentPhone, currentName);
+  } catch (err) {
+    alert("Error creating offer: " + err.message);
+  } finally {
+    btnSaveNewOffer.textContent = "Create Offer";
+    btnSaveNewOffer.disabled = false;
+  }
 });
 
 // Fetch CRM Context for Active Contact
@@ -207,10 +272,10 @@ async function fetchCrmContext(phone, name) {
 
     const data = await res.json();
     currentContact = data.contact;
-    currentDeal = data.deal;
+    currentDeals = data.deals || [];
     stagesList = data.stages || [];
 
-    // Render Contact Info
+    // Render Contact Header
     if (currentContact) {
       cName.textContent = currentContact.name || currentName || `Contact (${(currentContact.phone || "").slice(-4)})`;
       cPhone.textContent = currentContact.phone || currentPhone || "";
@@ -221,37 +286,144 @@ async function fetchCrmContext(phone, name) {
       cAvatar.textContent = "?";
     }
 
-    // Render Stages Dropdown & Match Current Deal Stage
-    if (stagesList.length > 0) {
-      stageSelect.innerHTML = stagesList
-        .map(
-          (s) => `<option value="${s.id}" ${currentDeal?.stage_id === s.id ? "selected" : ""}>${s.name}</option>`
-        )
+    // Populate New Offer Stage Dropdown
+    newOfferStage.innerHTML = stagesList
+      .map((s) => `<option value="${s.id}">${s.name}</option>`)
+      .join("");
+
+    // Populate Follow-up Deal selector
+    fuDealSelect.innerHTML = `<option value="">General Client Activity</option>` +
+      currentDeals
+        .map((d) => `<option value="${d.id}">${d.title || "Offer"} (${d.currency || "$"}${d.value || 0})</option>`)
         .join("");
 
-      if (currentDeal?.stage_id) {
-        stageSelect.value = currentDeal.stage_id;
-      }
-    }
-
-    // Render Deal Info
-    if (currentDeal) {
-      dealTitle.textContent = currentDeal.title || "Active Deal";
-      dealStatus.textContent = (currentDeal.status || "OPEN").toUpperCase();
-      dealStatus.className = currentDeal.status === "won" ? "badge bg-emerald-500/20 text-emerald-400" : "badge";
-      dealValueInput.value = currentDeal.value || 0;
-      dealCurrencySelect.value = currentDeal.currency || "USD";
-    } else {
-      dealTitle.textContent = currentContact ? "Lead Detected (Create Deal)" : "Pipeline Ready";
-      dealStatus.textContent = "NEW";
-      dealValueInput.value = 0;
-    }
+    // Render Offers List
+    renderOffers(currentDeals);
 
     // Render Timeline Activities
     renderTimeline(data.activities || []);
   } catch (err) {
     if (err.name === "AbortError") return;
     console.error("[WAPI Extension] Fetch context error:", err);
+  }
+}
+
+// Render All Client Offers / Deals
+function renderOffers(deals) {
+  if (!deals || deals.length === 0) {
+    offersList.innerHTML = `
+      <div style="color: #64748b; font-size: 11px; padding: 6px 0;">
+        No active offers for this client yet.<br>Click <strong>+ New Lead / Offer</strong> above to create one.
+      </div>
+    `;
+    return;
+  }
+
+  offersList.innerHTML = deals
+    .map((deal) => {
+      const isWon = deal.status === "won";
+      const isLost = deal.status === "lost";
+      const badgeClass = isWon ? "badge badge-won" : isLost ? "badge badge-lost" : "badge";
+
+      const stageOptions = stagesList
+        .map(
+          (s) => `<option value="${s.id}" ${deal.stage_id === s.id ? "selected" : ""}>${s.name}</option>`
+        )
+        .join("");
+
+      return `
+        <div class="offer-card" data-deal-id="${deal.id}">
+          <div class="offer-header">
+            <span class="offer-title">${deal.title || "Offer / Deal"}</span>
+            <span class="${badgeClass}">${(deal.status || "OPEN").toUpperCase()}</span>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span class="offer-value">${deal.currency || "USD"} ${(deal.value || 0).toLocaleString()}</span>
+            <span style="font-size: 10px; color: #64748b;">${new Date(deal.created_at).toLocaleDateString()}</span>
+          </div>
+
+          <label style="margin-top: 4px;">Pipeline Stage</label>
+          <select class="deal-stage-select" data-deal-id="${deal.id}" style="margin-bottom: 8px;">
+            ${stageOptions}
+          </select>
+
+          <div class="flex-row">
+            <button class="btn btn-won btn-mark-won-offer" data-deal-id="${deal.id}" style="flex: 1;">
+              ${isWon ? "🏆 Won ✓" : "🏆 Mark Won"}
+            </button>
+            <button class="btn btn-lost btn-mark-lost-offer" data-deal-id="${deal.id}" style="flex: 1;">
+              ${isLost ? "Lost ❌" : "Mark Lost"}
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  // Attach Stage Change listeners to each offer
+  document.querySelectorAll(".deal-stage-select").forEach((select) => {
+    select.addEventListener("change", async (e) => {
+      const dealId = e.target.getAttribute("data-deal-id");
+      const newStageId = e.target.value;
+      await updateDealStage(dealId, newStageId);
+    });
+  });
+
+  // Attach Mark Won listeners
+  document.querySelectorAll(".btn-mark-won-offer").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const dealId = btn.getAttribute("data-deal-id");
+      btn.textContent = "Processing...";
+      await updateDealStatus(dealId, "won");
+    });
+  });
+
+  // Attach Mark Lost listeners
+  document.querySelectorAll(".btn-mark-lost-offer").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const dealId = btn.getAttribute("data-deal-id");
+      btn.textContent = "Processing...";
+      await updateDealStatus(dealId, "lost");
+    });
+  });
+}
+
+// Update Stage of a specific offer
+async function updateDealStage(dealId, stageId) {
+  try {
+    const res = await fetch(`${serverUrl}/api/extension/deal`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        deal_id: dealId,
+        stage_id: stageId,
+      }),
+    });
+    if (res.ok) {
+      await fetchCrmContext(currentPhone, currentName);
+    }
+  } catch (err) {
+    console.error("Failed to update deal stage:", err);
+  }
+}
+
+// Update Status (Won / Lost) of a specific offer (Triggers Meta CAPI!)
+async function updateDealStatus(dealId, status) {
+  try {
+    const res = await fetch(`${serverUrl}/api/extension/deal`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        deal_id: dealId,
+        status: status,
+      }),
+    });
+    if (res.ok) {
+      await fetchCrmContext(currentPhone, currentName);
+    }
+  } catch (err) {
+    console.error("Failed to update deal status:", err);
   }
 }
 
@@ -267,7 +439,7 @@ function renderTimeline(acts) {
       (a) => `
     <div class="timeline-item">
       <div class="timeline-title">${a.title || a.type}</div>
-      <div class="timeline-time">${new Date(a.scheduled_at || a.created_at).toLocaleDateString()} — ${(a.status || "").toUpperCase()}</div>
+      <div class="timeline-time">${new Date(a.scheduled_at || a.created_at).toLocaleDateString()} — ${(a.status || "COMPLETED").toUpperCase()}</div>
       ${a.description ? `<div style="color: #cbd5e1; margin-top: 2px;">${a.description}</div>` : ""}
     </div>
   `
@@ -275,86 +447,22 @@ function renderTimeline(acts) {
     .join("");
 }
 
-// Update Deal
-btnSaveDeal.addEventListener("click", async () => {
-  if (!currentContact || !authToken) return;
-
-  btnSaveDeal.textContent = "Saving...";
-  try {
-    const body = {
-      deal_id: currentDeal?.id,
-      contact_id: currentContact.id,
-      stage_id: stageSelect.value,
-      value: parseFloat(dealValueInput.value) || 0,
-      currency: dealCurrencySelect.value,
-      status: currentDeal?.status || "open",
-    };
-
-    const res = await fetch(`${serverUrl}/api/extension/deal`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      btnSaveDeal.textContent = "Saved ✓";
-      setTimeout(() => (btnSaveDeal.textContent = "Update Deal"), 2000);
-      fetchCrmContext(currentPhone, currentName);
-    } else {
-      btnSaveDeal.textContent = "Failed ❌";
-    }
-  } catch (err) {
-    btnSaveDeal.textContent = "Failed ❌";
-  }
-});
-
-// Mark Deal Won (Triggers Meta CAPI Conversion Event!)
-btnMarkWon.addEventListener("click", async () => {
-  if (!currentContact || !authToken) return;
-
-  btnMarkWon.textContent = "Processing...";
-  try {
-    const body = {
-      deal_id: currentDeal?.id,
-      contact_id: currentContact.id,
-      stage_id: stageSelect.value,
-      value: parseFloat(dealValueInput.value) || 0,
-      currency: dealCurrencySelect.value,
-      status: "won",
-    };
-
-    const res = await fetch(`${serverUrl}/api/extension/deal`, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      btnMarkWon.textContent = "🏆 Won & CAPI Fired!";
-      setTimeout(() => (btnMarkWon.textContent = "🏆 Mark Won"), 2500);
-      fetchCrmContext(currentPhone, currentName);
-    } else {
-      btnMarkWon.textContent = "Failed ❌";
-    }
-  } catch (err) {
-    btnMarkWon.textContent = "Failed ❌";
-  }
-});
-
-// Save Follow-up (Normalizes type to DB constraints)
+// Save Follow-up / Activity (Syncs to CRM + Google Calendar)
 btnSaveFollowup.addEventListener("click", async () => {
   if (!currentContact || !authToken) return;
 
-  btnSaveFollowup.textContent = "Saving...";
+  btnSaveFollowup.textContent = "Saving to CRM...";
+  btnSaveFollowup.disabled = true;
+
   try {
     const channel = fuChannel.value;
-    const normType = channel === "call" ? "call" : channel === "meeting" ? "meeting" : "follow_up";
+    const dealId = fuDealSelect.value || null;
 
     const body = {
-      deal_id: currentDeal?.id,
+      deal_id: dealId,
       contact_id: currentContact.id,
-      type: normType,
-      title: fuTitle.value.trim() || `Follow-up via ${channel}`,
+      type: channel,
+      title: fuTitle.value.trim() || `Scheduled Follow-up via ${channel}`,
       scheduled_at: fuTime.value ? new Date(fuTime.value).toISOString() : new Date().toISOString(),
     };
 
@@ -365,15 +473,19 @@ btnSaveFollowup.addEventListener("click", async () => {
     });
 
     if (res.ok) {
-      btnSaveFollowup.textContent = "Scheduled ✓";
+      btnSaveFollowup.textContent = "Saved to CRM & Calendar ✓";
       fuTitle.value = "";
-      setTimeout(() => (btnSaveFollowup.textContent = "Save Follow-up"), 2000);
+      setTimeout(() => (btnSaveFollowup.textContent = "Save Activity to CRM & Calendar"), 2000);
       fetchCrmContext(currentPhone, currentName);
     } else {
       btnSaveFollowup.textContent = "Failed ❌";
+      setTimeout(() => (btnSaveFollowup.textContent = "Save Activity to CRM & Calendar"), 2000);
     }
   } catch (err) {
     btnSaveFollowup.textContent = "Failed ❌";
+    setTimeout(() => (btnSaveFollowup.textContent = "Save Activity to CRM & Calendar"), 2000);
+  } finally {
+    btnSaveFollowup.disabled = false;
   }
 });
 

@@ -116,6 +116,7 @@ function PipelinesPageInner() {
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [defaultStageId, setDefaultStageId] = useState<string>("");
   const [detailWorkspaceDealId, setDetailWorkspaceDealId] = useState<string | null>(null);
+  const [selectedDealObject, setSelectedDealObject] = useState<Deal | null>(null);
 
   // Won / Lost modal triggers
   const [wonModalOpen, setWonModalOpen] = useState(false);
@@ -322,6 +323,7 @@ function PipelinesPageInner() {
   );
 
   const handleCardClicked = useCallback((deal: Deal) => {
+    setSelectedDealObject(deal);
     setDetailWorkspaceDealId(deal.id);
   }, []);
 
@@ -515,9 +517,13 @@ function PipelinesPageInner() {
       <DealDetailWorkspace
         open={!!detailWorkspaceDealId}
         onOpenChange={(open) => {
-          if (!open) setDetailWorkspaceDealId(null);
+          if (!open) {
+            setDetailWorkspaceDealId(null);
+            setSelectedDealObject(null);
+          }
         }}
         dealId={detailWorkspaceDealId}
+        initialDeal={selectedDealObject}
         stages={stages}
         onDealUpdated={refreshDeals}
       />

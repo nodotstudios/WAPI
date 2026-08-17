@@ -10,6 +10,10 @@ export interface ExtensionAuthContext {
   name: string | null;
 }
 
+// In-memory token authentication cache (5-minute TTL) for sub-millisecond response times
+const authCache = new Map<string, { ctx: ExtensionAuthContext; expires: number }>();
+const presenceThrottle = new Map<string, number>();
+
 /**
  * Authenticates an extension request via either:
  * 1. User Session Access Token (from Email/Password login)
@@ -24,8 +28,27 @@ export async function authenticateExtensionRequest(
     ? authHeader.slice(7).trim()
     : authHeader.trim();
 
+  if (!token) return null;
+
+  // Check in-memory fast cache first
+  const cached = authCache.get(token);
+  if (cached && cached.expires > Date.now()) {
+    // Throttled presence update (every 60 seconds)
+    if (cached.ctx.userId) {
+      const lastPresence = presenceThrottle.get(cached.ctx.userId) || 0;
+      if (Date.now() - lastPresence > 60_000) {
+        presenceThrottle.set(cached.ctx.userId, Date.now());
+        void supabaseAdmin()
+          .from("profiles")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("user_id", cached.ctx.userId);
+      }
+    }
+    return cached.ctx;
+  }
+
   // 1. Try Supabase Auth JWT Access Token
-  if (token && !looksLikeApiKey(token)) {
+  if (!looksLikeApiKey(token)) {
     try {
       const { data: { user }, error: userErr } = await supabaseAdmin().auth.getUser(token);
       if (user && !userErr) {
@@ -36,18 +59,23 @@ export async function authenticateExtensionRequest(
           .maybeSingle();
 
         if (profile?.account_id) {
-          // Bump online presence
-          void supabaseAdmin()
-            .from("profiles")
-            .update({ last_seen_at: new Date().toISOString() })
-            .eq("user_id", user.id);
-
-          return {
+          const authContext: ExtensionAuthContext = {
             accountId: profile.account_id,
             userId: user.id,
             email: user.email || profile.email || null,
             name: profile.full_name || user.email || "Team Member",
           };
+
+          // Cache for 5 minutes
+          authCache.set(token, { ctx: authContext, expires: Date.now() + 5 * 60_000 });
+
+          // Bump presence
+          void supabaseAdmin()
+            .from("profiles")
+            .update({ last_seen_at: new Date().toISOString() })
+            .eq("user_id", user.id);
+
+          return authContext;
         }
       }
     } catch {
@@ -56,22 +84,27 @@ export async function authenticateExtensionRequest(
   }
 
   // 2. Try API Key
-  if (token && looksLikeApiKey(token)) {
+  if (looksLikeApiKey(token)) {
     try {
       const keyRow = await findActiveKeyByHash(hashApiKey(token));
       if (keyRow && keyRow.account_id) {
+        const authContext: ExtensionAuthContext = {
+          accountId: keyRow.account_id,
+          userId: keyRow.created_by,
+          email: null,
+          name: keyRow.name,
+        };
+
+        // Cache for 5 minutes
+        authCache.set(token, { ctx: authContext, expires: Date.now() + 5 * 60_000 });
+
         if (keyRow.created_by) {
           void supabaseAdmin()
             .from("profiles")
             .update({ last_seen_at: new Date().toISOString() })
             .eq("user_id", keyRow.created_by);
         }
-        return {
-          accountId: keyRow.account_id,
-          userId: keyRow.created_by,
-          email: null,
-          name: keyRow.name,
-        };
+        return authContext;
       }
     } catch {
       // Continue to next auth check
