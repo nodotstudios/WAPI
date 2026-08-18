@@ -78,6 +78,7 @@ function SettingsPageInner() {
     security: <SecurityPanel />,
     appearance: <AppearancePanel />,
     extension: <ExtensionSettings />,
+    'quick-replies': <QuickRepliesManager />,
     'facebook-ads': <FacebookAdsConfig />,
     'google-calendar': <GoogleCalendarConfig />,
     'data-retention': <DataRetentionSettings />,
