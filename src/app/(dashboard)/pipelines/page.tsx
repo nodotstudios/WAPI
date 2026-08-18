@@ -12,6 +12,7 @@ import { CrmArchiveGrid } from "@/components/crm/crm-archive-grid";
 import { CrmActivitiesView } from "@/components/crm/crm-activities-view";
 import { DealDetailWorkspace } from "@/components/crm/deal-detail-workspace";
 import { WonReasonModal, LostReasonModal } from "@/components/crm/won-lost-modals";
+import { QualifiedLeadModal } from "@/components/crm/qualified-lead-modal";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -118,12 +119,32 @@ function PipelinesPageInner() {
   const [detailWorkspaceDealId, setDetailWorkspaceDealId] = useState<string | null>(null);
   const [selectedDealObject, setSelectedDealObject] = useState<Deal | null>(null);
 
-  // Won / Lost modal triggers
+  // Won / Lost / Qualified modal triggers
   const [wonModalOpen, setWonModalOpen] = useState(false);
   const [lostModalOpen, setLostModalOpen] = useState(false);
   const [targetTransitionDeal, setTargetTransitionDeal] = useState<Deal | null>(null);
+  const [qualifiedModalOpen, setQualifiedModalOpen] = useState(false);
+  const [qualifiedDeal, setQualifiedDeal] = useState<Deal | null>(null);
+  const [qualifiedStageName, setQualifiedStageName] = useState<string>("");
+  const [qualifiedStageId, setQualifiedStageId] = useState<string>("");
 
   const seedAttempted = useRef(false);
+
+  // Load Meta CAPI config to get qualified_stage_id
+  useEffect(() => {
+    async function loadCapiConfig() {
+      try {
+        const res = await fetch("/api/meta/config", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.config?.qualified_stage_id) {
+          setQualifiedStageId(data.config.qualified_stage_id);
+        }
+      } catch (err) {
+        console.error("Failed to load CAPI config:", err);
+      }
+    }
+    void loadCapiConfig();
+  }, []);
 
   const loadPipelines = useCallback(async () => {
     const { data, error } = await supabase
@@ -179,47 +200,55 @@ function PipelinesPageInner() {
       return null;
     }
 
-    const stagesPayload = SPEC_DEFAULT_STAGES.map((s) => ({
-      pipeline_id: pipeline.id,
-      name: s.name,
-      color: s.color,
-      position: s.position,
-    }));
-    await supabase.from("pipeline_stages").insert(stagesPayload);
+    const defaultStages = [
+      { name: "New Lead", position: 0, color: "#3B82F6" },
+      { name: "Contacted", position: 1, color: "#8B5CF6" },
+      { name: "Qualified", position: 2, color: "#EC4899" },
+      { name: "Proposal Sent", position: 3, color: "#F59E0B" },
+      { name: "Negotiation", position: 4, color: "#10B981" },
+      { name: "Closed Won", position: 5, color: "#059669" },
+    ];
 
-    return pipeline as Pipeline;
+    await supabase.from("pipeline_stages").insert(
+      defaultStages.map((s) => ({
+        pipeline_id: pipeline.id,
+        name: s.name,
+        position: s.position,
+        color: s.color,
+      })),
+    );
+
+    return pipeline;
   }, [supabase, accountId]);
 
-  // Initial load
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    async function init() {
       setLoading(true);
-      let list = await loadPipelines();
+      const list = await loadPipelines();
+      if (cancelled) return;
 
       if (list.length === 0 && !seedAttempted.current) {
         seedAttempted.current = true;
         const seeded = await seedDefaultPipeline();
-        if (seeded) list = await loadPipelines();
-      }
-
-      if (cancelled) return;
-      setPipelines(list);
-      if (list.length > 0) {
-        setSelectedPipelineId((prev) =>
-          prev && list.some((p) => p.id === prev) ? prev : list[0].id,
-        );
+        if (seeded && !cancelled) {
+          setPipelines([seeded]);
+          setSelectedPipelineId(seeded.id);
+        }
       } else {
-        setSelectedPipelineId("");
+        setPipelines(list);
+        if (list.length > 0 && !selectedPipelineId) {
+          setSelectedPipelineId(list[0].id);
+        }
       }
       setLoading(false);
-    })();
+    }
+    init();
     return () => {
       cancelled = true;
     };
-  }, [loadPipelines, seedDefaultPipeline]);
+  }, [loadPipelines, seedDefaultPipeline, selectedPipelineId]);
 
-  // Load stages + deals
   useEffect(() => {
     if (!selectedPipelineId) {
       setStages([]);
@@ -227,15 +256,17 @@ function PipelinesPageInner() {
       return;
     }
     let cancelled = false;
-    (async () => {
+    async function loadData() {
       const [s, d] = await Promise.all([
         loadStages(selectedPipelineId),
         loadDeals(selectedPipelineId),
       ]);
-      if (cancelled) return;
-      setStages(s);
-      setDeals(d);
-    })();
+      if (!cancelled) {
+        setStages(s);
+        setDeals(d);
+      }
+    }
+    loadData();
     return () => {
       cancelled = true;
     };
@@ -259,7 +290,7 @@ function PipelinesPageInner() {
     setDeals(await loadDeals(selectedPipelineId));
   }, [loadDeals, selectedPipelineId]);
 
-  // Handle Drag and Drop with Won/Lost Lifecycle Prompts
+  // Handle Drag and Drop with Qualified Lead Prompt and Won stage retention
   const handleDealMoved = useCallback(
     async (dealId: string, newStageId: string) => {
       const targetStage = stages.find((s) => s.id === newStageId);
@@ -267,14 +298,7 @@ function PipelinesPageInner() {
       if (!targetStage || !movedDeal) return;
 
       const stageName = targetStage.name.toLowerCase();
-      const isWonStage = /won|closed won|converted/i.test(stageName);
       const isLostStage = /lost|closed lost|dropped/i.test(stageName);
-
-      if (isWonStage) {
-        setTargetTransitionDeal(movedDeal);
-        setWonModalOpen(true);
-        return;
-      }
 
       if (isLostStage) {
         setTargetTransitionDeal(movedDeal);
@@ -282,7 +306,7 @@ function PipelinesPageInner() {
         return;
       }
 
-      // Regular active stage move
+      // Update stage on the active Kanban board immediately
       setDeals((prev) =>
         prev.map((d) => (d.id === dealId ? { ...d, stage_id: newStageId } : d)),
       );
@@ -308,9 +332,16 @@ function PipelinesPageInner() {
             status: "completed",
           }),
         });
+
+        // Prompt for Qualified Lead if mapped to qualified_stage_id
+        if (qualifiedStageId && newStageId === qualifiedStageId) {
+          setQualifiedDeal({ ...movedDeal, stage_id: newStageId });
+          setQualifiedStageName(targetStage.name);
+          setQualifiedModalOpen(true);
+        }
       }
     },
-    [stages, deals, supabase, refreshDeals, t],
+    [stages, deals, supabase, refreshDeals, t, qualifiedStageId],
   );
 
   const handleAddDeal = useCallback(
@@ -614,6 +645,16 @@ function PipelinesPageInner() {
         defaultStageId={defaultStageId}
         onSaved={refreshDeals}
       />
+
+      {/* Qualified Lead Prompt Modal */}
+      {qualifiedDeal && (
+        <QualifiedLeadModal
+          open={qualifiedModalOpen}
+          onOpenChange={setQualifiedModalOpen}
+          deal={qualifiedDeal}
+          stageName={qualifiedStageName}
+        />
+      )}
     </div>
   );
 }

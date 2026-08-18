@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Flame,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -37,6 +38,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { createClient } from "@/lib/supabase/client";
 import { CallOutcomeModal, ScheduleMeetingModal, ScheduleFollowUpModal } from "./activity-modals";
 import { WonReasonModal, LostReasonModal } from "./won-lost-modals";
+import { EditDealModal } from "./edit-deal-modal";
+import { ArchiveWonModal } from "./archive-won-modal";
 import type { Deal, CrmActivity, PipelineStage } from "@/types";
 
 interface DealDetailWorkspaceProps {
@@ -64,6 +67,8 @@ export function DealDetailWorkspace({
   const [addingNote, setAddingNote] = useState(false);
 
   // Modals
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [archiveWonModalOpen, setArchiveWonModalOpen] = useState(false);
   const [callModalOpen, setCallModalOpen] = useState(false);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [followUpModalOpen, setFollowUpModalOpen] = useState(false);
@@ -314,14 +319,25 @@ export function DealDetailWorkspace({
                     </div>
                   </div>
 
-                  {/* Value Banner */}
-                  <div className="shrink-0 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-right shadow-sm">
-                    <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono tracking-tight">
-                      {deal.currency || "$"}{Number(deal.value || 0).toLocaleString()}
+                  {/* Value Banner & Edit Offer Button */}
+                  <div className="shrink-0 flex flex-col items-end gap-2">
+                    <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-right shadow-sm w-full">
+                      <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono tracking-tight">
+                        {deal.currency || "$"}{Number(deal.value || 0).toLocaleString()}
+                      </div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400/80">
+                        Offer Value
+                      </div>
                     </div>
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400/80">
-                      Offer Value
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditModalOpen(true)}
+                      className="h-7 px-3 text-xs gap-1.5 border-border bg-card text-foreground hover:bg-muted shadow-sm"
+                    >
+                      <Pencil className="size-3 text-primary" />
+                      Edit Offer
+                    </Button>
                   </div>
                 </div>
 
@@ -401,6 +417,16 @@ export function DealDetailWorkspace({
                       <Video className="size-3.5" />
                       Schedule Google Meet
                     </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditModalOpen(true)}
+                      className="h-8.5 gap-1.5 text-xs border-border bg-card text-foreground hover:bg-muted shadow-sm"
+                    >
+                      <Pencil className="size-3.5 text-primary" />
+                      Edit Details
+                    </Button>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -408,11 +434,12 @@ export function DealDetailWorkspace({
                       <>
                         <Button
                           size="sm"
-                          onClick={() => setWonModalOpen(true)}
-                          className="h-8.5 gap-1.5 text-xs bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/40"
+                          onClick={() => setArchiveWonModalOpen(true)}
+                          className="h-8.5 gap-1.5 text-xs bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm font-semibold"
+                          title="Finalize & Archive this deal to Won Deals and send Purchase conversion to Meta Pixel"
                         >
                           <Trophy className="size-3.5" />
-                          Mark Won
+                          Archive to Won Deals
                         </Button>
                         <Button
                           size="sm"
@@ -709,6 +736,27 @@ export function DealDetailWorkspace({
       {/* Activity Modals */}
       {deal && (
         <>
+          <EditDealModal
+            open={editModalOpen}
+            onOpenChange={setEditModalOpen}
+            deal={deal}
+            stages={stages}
+            onSaved={() => {
+              void loadDealAndTimeline();
+              onDealUpdated();
+            }}
+          />
+
+          <ArchiveWonModal
+            open={archiveWonModalOpen}
+            onOpenChange={setArchiveWonModalOpen}
+            deal={deal}
+            onSuccess={() => {
+              onOpenChange(false);
+              onDealUpdated();
+            }}
+          />
+
           <CallOutcomeModal
             open={callModalOpen}
             onOpenChange={setCallModalOpen}

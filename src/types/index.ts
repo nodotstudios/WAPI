@@ -801,6 +801,7 @@ export interface FacebookAdsConfig {
   currency: string;
   auto_send_on_deal_won: boolean;
   auto_send_stage_id?: string | null;
+  qualified_stage_id?: string | null;
   created_at: string;
   updated_at: string;
 }

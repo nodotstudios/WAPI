@@ -41,6 +41,7 @@ export function FacebookAdsConfig() {
   const [currency, setCurrency] = useState("USD");
   const [autoSendOnDealWon, setAutoSendOnDealWon] = useState(false);
   const [autoSendStageId, setAutoSendStageId] = useState<string>("");
+  const [qualifiedStageId, setQualifiedStageId] = useState<string>("");
   const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
 
   // Event Logs
@@ -69,6 +70,7 @@ export function FacebookAdsConfig() {
         setCurrency(data.config.currency || "USD");
         setAutoSendOnDealWon(data.config.auto_send_on_deal_won ?? false);
         setAutoSendStageId(data.config.auto_send_stage_id || "");
+        setQualifiedStageId(data.config.qualified_stage_id || "");
       }
     } finally {
       setLoading(false);
@@ -104,8 +106,9 @@ export function FacebookAdsConfig() {
           access_token: accessToken,
           test_event_code: testEventCode,
           currency,
-          auto_send_on_deal_won: !!autoSendStageId,
+          auto_send_on_deal_won: autoSendOnDealWon,
           auto_send_stage_id: autoSendStageId || null,
+          qualified_stage_id: qualifiedStageId || null,
         }),
       });
 
@@ -302,51 +305,76 @@ export function FacebookAdsConfig() {
             </div>
           </div>
 
-          {/* Automation & Pipeline Stage Mapping */}
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4">
+          {/* Meta Conversion Funnel & Stage Mapping */}
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-6">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
-                <DollarSign className="size-5" />
+              <div className="flex size-10 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400">
+                <Flame className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-semibold text-foreground">
-                  Pipeline Stage Auto-Conversion Mapping
+                  Meta Conversion Funnel & Stage Mapping
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Map a specific pipeline stage/column to automatically trigger a Purchase conversion to Meta Pixel.
+                  Map your pipeline stages to Meta conversion lifecycle events (Qualified Lead & Purchase).
                 </p>
               </div>
             </div>
 
+            {/* 1. Qualified Lead Mapping */}
             <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-border">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Auto-Push When Moved To Stage:
+                  🎯 Qualified Lead Stage:
                 </label>
                 <select
-                  value={autoSendStageId}
-                  onChange={(e) => setAutoSendStageId(e.target.value)}
+                  value={qualifiedStageId}
+                  onChange={(e) => setQualifiedStageId(e.target.value)}
                   className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
                 >
-                  <option value="">Disabled / Manual Push Only (Recommended)</option>
+                  <option value="">None / Manual Only</option>
                   {stages.map((stg) => (
                     <option key={stg.id} value={stg.id}>
                       {stg.name}
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Select which column in your pipeline represents qualified leads.
+                </p>
               </div>
 
               <div className="flex items-center text-xs text-muted-foreground rounded-xl border border-border/60 bg-muted/40 p-3.5">
-                {autoSendStageId ? (
-                  <p className="text-emerald-400">
-                    ✅ Moving a deal to <strong>&quot;{stages.find((s) => s.id === autoSendStageId)?.name || "selected stage"}&quot;</strong> will automatically trigger a Purchase event.
+                {qualifiedStageId ? (
+                  <p className="text-purple-300">
+                    💡 When you drag a deal to <strong>&quot;{stages.find((s) => s.id === qualifiedStageId)?.name || "selected stage"}&quot;</strong>, the CRM will ask if you want to notify Meta that this lead is qualified. The deal stays in your active pipeline.
                   </p>
                 ) : (
                   <p>
-                    🔒 <strong>Zero accidental pushes:</strong> Auto-push is disabled. Conversions will only be sent when an agent clicks <strong>&quot;Push to Facebook Pixel&quot;</strong> on confirmed sales.
+                    Select a stage above if you want prompt confirmations to dispatch <strong>&quot;Lead&quot;</strong> events to Meta when clients qualify.
                   </p>
                 )}
+              </div>
+            </div>
+
+            {/* 2. Purchase Conversion & Won Deals Archiving */}
+            <div className="grid gap-4 sm:grid-cols-2 pt-4 border-t border-border">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <DollarSign className="size-4 text-emerald-400" />
+                  <span className="text-xs font-semibold text-foreground">
+                    🏆 Purchase Event (Won Deals Archive)
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When deals reach your Won stage, they stay visible on your active board. When you choose to <strong>Archive to Won Deals</strong>, the deal is moved to the Won Deals section and the <strong>Purchase</strong> conversion event is dispatched to Meta Pixel.
+                </p>
+              </div>
+
+              <div className="flex items-center text-xs text-emerald-400 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3.5">
+                <p>
+                  🔒 <strong>Zero False Positives:</strong> Deals stay on your active board without premature auto-pushes until you finalize and archive them as confirmed Won Deals.
+                </p>
               </div>
             </div>
           </div>

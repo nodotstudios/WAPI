@@ -144,6 +144,7 @@ export async function GET(request: Request) {
           .select("id, title, value, currency, status, stage_id, created_at, won_at, lost_at")
           .eq("account_id", accountId)
           .eq("contact_id", contact.id)
+          .eq("status", "open")
           .order("created_at", { ascending: false }),
         supabase
           .from("crm_activities")

@@ -2,28 +2,40 @@
 
 .wapi-fab-button {
   position: fixed;
-  bottom: 20px;
-  right: 385px;
+  bottom: 24px;
+  right: 390px;
   z-index: 999999;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   background: linear-gradient(135deg, #10b981, #059669);
   color: #ffffff;
-  border: none;
-  border-radius: 9999px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px -2px rgba(16, 185, 129, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .wapi-fab-button:hover {
-  transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 12px 28px -4px rgba(16, 185, 129, 0.5), 0 10px 12px -5px rgba(0, 0, 0, 0.4);
+  transform: scale(1.08);
+  box-shadow: 0 10px 28px -2px rgba(16, 185, 129, 0.65), 0 6px 14px rgba(0, 0, 0, 0.4);
+}
+
+.wapi-fab-button:active {
+  cursor: grabbing;
+  transform: scale(0.96);
+}
+
+.wapi-fab-button svg {
+  width: 22px;
+  height: 22px;
+  stroke: #ffffff;
+  stroke-width: 2.2;
 }
 
 .wapi-side-panel {

@@ -253,19 +253,19 @@ export async function POST(request: Request) {
     if (status === "won" && updatedDeal) {
       try {
         const { data: capiConfig } = await supabase
-          .from("facebook_capi_config")
+          .from("facebook_ads_config")
           .select("*")
           .eq("account_id", accountId)
-          .eq("is_enabled", true)
-          .single();
+          .maybeSingle();
 
         if (capiConfig && capiConfig.pixel_id && capiConfig.access_token) {
           const contact = updatedDeal.contact;
+          const metaEventId = `deal_won_${updatedDeal.id}_${Date.now()}`;
           const res = await sendMetaConversionEvent({
             pixelId: capiConfig.pixel_id,
             accessToken: capiConfig.access_token,
             eventName: "Purchase",
-            eventId: `deal_won_${updatedDeal.id}_${Date.now()}`,
+            eventId: metaEventId,
             phone: contact?.phone || undefined,
             email: contact?.email || undefined,
             firstName: contact?.name || undefined,
@@ -275,6 +275,20 @@ export async function POST(request: Request) {
             testEventCode: capiConfig.test_event_code || undefined,
           });
           capiSent = res.success;
+
+          // Record conversion event audit log
+          await supabase.from("facebook_conversion_events").insert({
+            account_id: accountId,
+            contact_id: updatedDeal.contact_id,
+            deal_id: updatedDeal.id,
+            event_name: "Purchase",
+            event_time: new Date().toISOString(),
+            value: updatedDeal.value || 0,
+            currency: updatedDeal.currency || "USD",
+            meta_event_id: metaEventId,
+            status: res.success ? "sent" : "failed",
+            error_message: res.error || null,
+          });
         }
       } catch (err) {
         console.error("CAPI trigger from extension deal route failed:", err);

@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       currency,
       auto_send_on_deal_won,
       auto_send_stage_id,
+      qualified_stage_id,
     } = body;
 
     const payload = {
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
       currency: typeof currency === "string" && currency.trim() ? currency.trim().toUpperCase() : "USD",
       auto_send_on_deal_won: typeof auto_send_on_deal_won === "boolean" ? auto_send_on_deal_won : false,
       auto_send_stage_id: typeof auto_send_stage_id === "string" && auto_send_stage_id.trim() ? auto_send_stage_id.trim() : null,
+      qualified_stage_id: typeof qualified_stage_id === "string" && qualified_stage_id.trim() ? qualified_stage_id.trim() : null,
       updated_at: new Date().toISOString(),
     };
 
