@@ -1,6 +1,6 @@
 /**
  * WAPI Extension Side-Panel Controller
- * Ultra-Fast Direct Sync + In-Memory Caching + Multi-Offer Sales CRM
+ * Ultra-Fast Direct Sync + In-Memory Caching + Multi-Offer Sales CRM + Offering Templates & Edit
  */
 
 let serverUrl = "https://wapi-blond.vercel.app";
@@ -12,6 +12,7 @@ let currentName = "";
 let currentContact = null;
 let currentDeals = [];
 let stagesList = [];
+let offeringsList = [];
 let fetchAbortController = null;
 
 // High-speed In-Memory Client Cache (phone/name -> { contact, deals, activities, timestamp })
@@ -20,8 +21,7 @@ const contactCache = new Map();
 // DOM Elements - Auth & Views
 const viewLogin = document.getElementById("view-login");
 const viewCrm = document.getElementById("view-crm");
-const authStatusContainer = document.getElementById("auth-status-container");
-const userDisplayName = document.getElementById("user-display-name");
+const userDisplay = document.getElementById("user-display");
 const btnLogout = document.getElementById("btn-logout");
 
 const loginUrlInput = document.getElementById("login-url");
@@ -38,12 +38,25 @@ const cPhone = document.getElementById("c-phone");
 // DOM Elements - New Offer Creator
 const btnToggleNewOffer = document.getElementById("btn-toggle-new-offer");
 const newOfferBox = document.getElementById("new-offer-box");
+const newOfferTemplate = document.getElementById("new-offer-template");
 const newOfferTitle = document.getElementById("new-offer-title");
 const newOfferValue = document.getElementById("new-offer-value");
 const newOfferCurrency = document.getElementById("new-offer-currency");
 const newOfferStage = document.getElementById("new-offer-stage");
 const btnSaveNewOffer = document.getElementById("btn-save-new-offer");
 const btnCancelNewOffer = document.getElementById("btn-cancel-new-offer");
+
+// DOM Elements - Edit Offer Box
+const editOfferBox = document.getElementById("edit-offer-box");
+const editOfferId = document.getElementById("edit-offer-id");
+const editOfferBadge = document.getElementById("edit-offer-badge");
+const editOfferTemplate = document.getElementById("edit-offer-template");
+const editOfferTitle = document.getElementById("edit-offer-title");
+const editOfferValue = document.getElementById("edit-offer-value");
+const editOfferCurrency = document.getElementById("edit-offer-currency");
+const editOfferStage = document.getElementById("edit-offer-stage");
+const btnSaveEditOffer = document.getElementById("btn-save-edit-offer");
+const btnCancelEditOffer = document.getElementById("btn-cancel-edit-offer");
 
 const offersList = document.getElementById("offers-list");
 
@@ -70,25 +83,30 @@ function renderView(isLoggedIn) {
   if (isLoggedIn && currentUser) {
     viewLogin.style.display = "none";
     viewCrm.style.display = "block";
-    authStatusContainer.style.display = "block";
-    userDisplayName.textContent = currentUser.name || currentUser.email || "Logged In";
+    userDisplay.textContent = currentUser.name || currentUser.email || "Online";
+    btnLogout.style.display = "inline-block";
   } else {
     viewLogin.style.display = "block";
     viewCrm.style.display = "none";
-    authStatusContainer.style.display = "none";
+    userDisplay.textContent = "Offline";
+    btnLogout.style.display = "none";
   }
 }
 
 // Load stored session on startup
 function initSession() {
   if (chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(["wapiAuthToken", "wapiUser", "wapiServerUrl", "wapiStages"], (items) => {
+    chrome.storage.local.get(["wapiAuthToken", "wapiUser", "wapiServerUrl", "wapiStages", "wapiOfferings"], (items) => {
       if (items.wapiServerUrl) {
         serverUrl = items.wapiServerUrl.replace(/\/$/, "");
         loginUrlInput.value = serverUrl;
       }
       if (items.wapiStages && Array.isArray(items.wapiStages)) {
         stagesList = items.wapiStages;
+      }
+      if (items.wapiOfferings && Array.isArray(items.wapiOfferings)) {
+        offeringsList = items.wapiOfferings;
+        populateTemplateSelectors();
       }
       if (items.wapiAuthToken && items.wapiUser) {
         authToken = items.wapiAuthToken;
@@ -98,31 +116,31 @@ function initSession() {
         renderView(false);
       }
     });
-  } else {
-    renderView(false);
   }
 }
 
-// Handle Sign In with Email & Password
+// Handle User Login
 btnLogin.addEventListener("click", async () => {
-  const url = loginUrlInput.value.trim().replace(/\/$/, "") || "https://wapi-blond.vercel.app";
   const email = loginEmailInput.value.trim();
-  const password = loginPasswordInput.value;
-
-  loginError.style.display = "none";
-  loginError.textContent = "";
+  const password = loginPasswordInput.value.trim();
+  const urlVal = loginUrlInput.value.trim();
 
   if (!email || !password) {
-    loginError.textContent = "Please enter both email and password.";
+    loginError.textContent = "Please enter your email and password.";
     loginError.style.display = "block";
     return;
   }
 
+  if (urlVal) {
+    serverUrl = urlVal.replace(/\/$/, "");
+  }
+
   btnLogin.textContent = "Signing In...";
   btnLogin.disabled = true;
+  loginError.style.display = "none";
 
   try {
-    const res = await fetch(`${url}/api/extension/login`, {
+    const res = await fetch(`${serverUrl}/api/extension/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -131,10 +149,9 @@ btnLogin.addEventListener("click", async () => {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.token) {
-      throw new Error(data.error || `Login failed (${res.status})`);
+      throw new Error(data.error || "Invalid login credentials. Please try again.");
     }
 
-    serverUrl = url;
     authToken = data.token;
     currentUser = data.user;
 
@@ -173,8 +190,43 @@ btnLogout.addEventListener("click", () => {
   renderView(false);
 });
 
+// Populate Template Dropdowns
+function populateTemplateSelectors() {
+  const templateOptions = `<option value="">-- Custom Offer (No Template) --</option>` +
+    offeringsList.map((o) => `<option value="${o.id}">${o.title} (${o.currency || "$"}${o.value || 0})</option>`).join("");
+
+  newOfferTemplate.innerHTML = templateOptions;
+  editOfferTemplate.innerHTML = `<option value="">-- Keep Current / Custom --</option>` +
+    offeringsList.map((o) => `<option value="${o.id}">${o.title} (${o.currency || "$"}${o.value || 0})</option>`).join("");
+}
+
+// Handle Template Selection on New Offer
+newOfferTemplate.addEventListener("change", (e) => {
+  const selectedId = e.target.value;
+  if (!selectedId) return;
+  const match = offeringsList.find((o) => o.id === selectedId);
+  if (match) {
+    newOfferTitle.value = match.title || "";
+    newOfferValue.value = match.value || "0";
+    if (match.currency) newOfferCurrency.value = match.currency;
+  }
+});
+
+// Handle Template Selection on Edit Offer
+editOfferTemplate.addEventListener("change", (e) => {
+  const selectedId = e.target.value;
+  if (!selectedId) return;
+  const match = offeringsList.find((o) => o.id === selectedId);
+  if (match) {
+    editOfferTitle.value = match.title || "";
+    editOfferValue.value = match.value || "0";
+    if (match.currency) editOfferCurrency.value = match.currency;
+  }
+});
+
 // Toggle New Offer Creator Box
 btnToggleNewOffer.addEventListener("click", () => {
+  editOfferBox.style.display = "none";
   const isVisible = newOfferBox.style.display === "block";
   newOfferBox.style.display = isVisible ? "none" : "block";
   if (!isVisible) {
@@ -186,6 +238,13 @@ btnCancelNewOffer.addEventListener("click", () => {
   newOfferBox.style.display = "none";
   newOfferTitle.value = "";
   newOfferValue.value = "0";
+  newOfferTemplate.value = "";
+});
+
+// Cancel Edit Offer
+btnCancelEditOffer.addEventListener("click", () => {
+  editOfferBox.style.display = "none";
+  editOfferId.value = "";
 });
 
 // Create New Lead / Offer (Auto-creates contact if not in CRM)
@@ -232,6 +291,7 @@ btnSaveNewOffer.addEventListener("click", async () => {
     newOfferBox.style.display = "none";
     newOfferTitle.value = "";
     newOfferValue.value = "0";
+    newOfferTemplate.value = "";
 
     // Invalidate local cache for this contact
     const cacheKey = currentPhone || currentName;
@@ -247,51 +307,137 @@ btnSaveNewOffer.addEventListener("click", async () => {
   }
 });
 
-// Fetch CRM Context for Active Contact with Fast Memory Caching
-async function fetchCrmContext(phone, name, allowCached = true) {
+// Save Edited Offer
+btnSaveEditOffer.addEventListener("click", async () => {
+  const dealId = editOfferId.value;
+  if (!dealId || !authToken) return;
+
+  const title = editOfferTitle.value.trim() || "Offer";
+  const value = parseFloat(editOfferValue.value) || 0;
+  const currency = editOfferCurrency.value || "USD";
+  const stage_id = editOfferStage.value;
+
+  btnSaveEditOffer.textContent = "Saving...";
+  btnSaveEditOffer.disabled = true;
+
+  // 1. Optimistic Update in UI & memory
+  const dealIdx = currentDeals.findIndex((d) => d.id === dealId);
+  if (dealIdx !== -1) {
+    currentDeals[dealIdx] = {
+      ...currentDeals[dealIdx],
+      title,
+      value,
+      currency,
+      stage_id,
+    };
+    renderOffers(currentDeals);
+    populateStageAndDealSelectors();
+  }
+
+  editOfferBox.style.display = "none";
+
+  // 2. Send update to backend
+  try {
+    const res = await fetch(`${serverUrl}/api/extension/deal`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        deal_id: dealId,
+        title,
+        value,
+        currency,
+        stage_id,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to save changes to server");
+    }
+
+    // Invalidate cache and update
+    const cacheKey = currentPhone || currentName;
+    if (cacheKey && contactCache.has(cacheKey)) {
+      const cached = contactCache.get(cacheKey);
+      cached.deals = currentDeals;
+    }
+  } catch (err) {
+    alert("Error updating offer: " + err.message);
+  } finally {
+    btnSaveEditOffer.textContent = "Save Changes";
+    btnSaveEditOffer.disabled = false;
+  }
+});
+
+// Open Edit Offer Box
+function openEditOfferModal(dealId) {
+  const deal = currentDeals.find((d) => d.id === dealId);
+  if (!deal) return;
+
+  newOfferBox.style.display = "none";
+  editOfferId.value = deal.id;
+  editOfferTitle.value = deal.title || "";
+  editOfferValue.value = deal.value || "0";
+  editOfferCurrency.value = deal.currency || "USD";
+  editOfferBadge.textContent = (deal.status || "OPEN").toUpperCase();
+  editOfferBadge.className = `badge ${deal.status === "won" ? "badge-won" : deal.status === "lost" ? "badge-lost" : "badge-open"}`;
+
+  // Populate Edit Stage Dropdown
+  editOfferStage.innerHTML = stagesList
+    .map((s) => `<option value="${s.id}" ${deal.stage_id === s.id ? "selected" : ""}>${s.name}</option>`)
+    .join("");
+
+  editOfferTemplate.value = "";
+  editOfferBox.style.display = "block";
+  editOfferTitle.focus();
+}
+
+/**
+ * Fetch CRM Context for WhatsApp Chat
+ * Ultra-Fast Direct Sync with In-Memory Caching & Stale-While-Revalidate Pattern
+ */
+async function fetchCrmContext(phone, name, useCache = true) {
   currentPhone = phone || "";
   currentName = name || "";
 
-  if (!authToken) return;
+  if (!authToken) {
+    renderContactHeader(null, name, phone);
+    return;
+  }
 
   const cacheKey = currentPhone || currentName;
 
-  // 1. Instant Render from In-Memory Cache (0ms)
-  if (allowCached && cacheKey && contactCache.has(cacheKey)) {
+  // 1. INSTANT 0ms MEMORY CACHE HIT (Stale-While-Revalidate)
+  if (useCache && cacheKey && contactCache.has(cacheKey)) {
     const cached = contactCache.get(cacheKey);
     currentContact = cached.contact;
     currentDeals = cached.deals || [];
     renderContactHeader(cached.contact, currentName, currentPhone);
-    renderOffers(currentDeals);
-    renderTimeline(cached.activities || []);
+    renderOffers(cached.deals);
+    renderTimeline(cached.activities);
     populateStageAndDealSelectors();
-  } else {
-    // Render optimistic name & phone instantly
-    if (currentName || currentPhone) {
-      cName.textContent = currentName || `Contact (${currentPhone.slice(-4)})`;
-      cPhone.textContent = currentPhone || "Syncing...";
-      cAvatar.textContent = (currentName || currentPhone || "C").charAt(0).toUpperCase();
-
-      offersList.innerHTML = `
-        <div style="color: #94a3b8; font-size: 11px; padding: 10px 0; text-align: center;">
-          <span style="display: inline-block; animation: spin 1s linear infinite; margin-right: 4px;">⚡</span>
-          Syncing offers...
-        </div>
-      `;
-    }
+  } else if (!contactCache.has(cacheKey)) {
+    // Brand new contact: immediately render header with contact details without lag
+    currentContact = null;
+    currentDeals = [];
+    renderContactHeader(null, currentName, currentPhone);
+    renderOffers([]);
+    renderTimeline([]);
   }
 
+  // Cancel any in-flight request for previous chats
   if (fetchAbortController) {
     fetchAbortController.abort();
   }
   fetchAbortController = new AbortController();
 
+  // 2. BACKGROUND REVALIDATION / FAST SERVER SYNC
   try {
     const params = new URLSearchParams();
-    if (currentPhone) params.set("phone", currentPhone);
-    if (currentName) params.set("name", currentName);
+    if (phone) params.set("phone", phone);
+    if (name) params.set("name", name);
 
     const res = await fetch(`${serverUrl}/api/extension/context?${params.toString()}`, {
+      method: "GET",
       headers: getAuthHeaders(),
       signal: fetchAbortController.signal,
     });
@@ -300,27 +446,32 @@ async function fetchCrmContext(phone, name, allowCached = true) {
       if (res.status === 401) {
         authToken = "";
         currentUser = null;
-        if (chrome.storage && chrome.storage.local) {
-          chrome.storage.local.remove(["wapiAuthToken", "wapiUser"]);
-        }
         renderView(false);
-        return;
       }
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `HTTP ${res.status}`);
+      return;
     }
 
     const data = await res.json();
-    currentContact = data.contact;
-    currentDeals = data.deals || [];
-    if (data.stages && data.stages.length > 0) {
+
+    // Cache stages and offerings globally
+    if (data.stages && Array.isArray(data.stages)) {
       stagesList = data.stages;
       if (chrome.storage && chrome.storage.local) {
         chrome.storage.local.set({ wapiStages: stagesList });
       }
     }
+    if (data.offerings && Array.isArray(data.offerings)) {
+      offeringsList = data.offerings;
+      populateTemplateSelectors();
+      if (chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ wapiOfferings: offeringsList });
+      }
+    }
 
-    // Save to fast in-memory cache
+    currentContact = data.contact || null;
+    currentDeals = data.deals || [];
+
+    // Save fresh data into in-memory cache
     if (cacheKey) {
       contactCache.set(cacheKey, {
         contact: currentContact,
@@ -330,20 +481,14 @@ async function fetchCrmContext(phone, name, allowCached = true) {
       });
     }
 
-    // Render Contact Header
+    // Refresh UI with verified server state
     renderContactHeader(currentContact, currentName, currentPhone);
-
-    // Populate selectors
-    populateStageAndDealSelectors();
-
-    // Render Offers List
     renderOffers(currentDeals);
-
-    // Render Timeline Activities
     renderTimeline(data.activities || []);
+    populateStageAndDealSelectors();
   } catch (err) {
     if (err.name === "AbortError") return;
-    console.error("[WAPI Extension] Fetch context error:", err);
+    console.error("[WAPI Extension] Context fetch error:", err);
   }
 }
 
@@ -374,7 +519,7 @@ function populateStageAndDealSelectors() {
       .join("");
 }
 
-// Render All Client Offers / Deals with Delete Button
+// Render All Client Offers / Deals with Edit & Delete Buttons
 function renderOffers(deals) {
   if (!deals || deals.length === 0) {
     offersList.innerHTML = `
@@ -389,7 +534,7 @@ function renderOffers(deals) {
     .map((deal) => {
       const isWon = deal.status === "won";
       const isLost = deal.status === "lost";
-      const badgeClass = isWon ? "badge badge-won" : isLost ? "badge badge-lost" : "badge";
+      const badgeClass = isWon ? "badge badge-won" : isLost ? "badge badge-lost" : "badge badge-open";
 
       const stageOptions = stagesList
         .map(
@@ -403,7 +548,10 @@ function renderOffers(deals) {
             <span class="offer-title">${deal.title || "Offer / Deal"}</span>
             <div style="display: flex; align-items: center; gap: 4px;">
               <span class="${badgeClass}">${(deal.status || "OPEN").toUpperCase()}</span>
-              <button class="btn btn-delete btn-delete-offer" data-deal-id="${deal.id}" title="Delete offer">
+              <button class="btn-edit-offer" data-deal-id="${deal.id}" title="Edit offer">
+                ✏️
+              </button>
+              <button class="btn-delete-offer" data-deal-id="${deal.id}" title="Delete offer">
                 🗑️
               </button>
             </div>
@@ -441,9 +589,18 @@ function renderOffers(deals) {
     });
   });
 
+  // Attach Edit Offer listeners
+  document.querySelectorAll(".btn-edit-offer").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const dealId = btn.getAttribute("data-deal-id");
+      openEditOfferModal(dealId);
+    });
+  });
+
   // Attach Mark Won listeners
   document.querySelectorAll(".btn-mark-won-offer").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
+    btn.addEventListener("click", async () => {
       const dealId = btn.getAttribute("data-deal-id");
       btn.textContent = "Processing...";
       await updateDealStatus(dealId, "won");
@@ -452,7 +609,7 @@ function renderOffers(deals) {
 
   // Attach Mark Lost listeners
   document.querySelectorAll(".btn-mark-lost-offer").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
+    btn.addEventListener("click", async () => {
       const dealId = btn.getAttribute("data-deal-id");
       btn.textContent = "Processing...";
       await updateDealStatus(dealId, "lost");
@@ -461,7 +618,7 @@ function renderOffers(deals) {
 
   // Attach Delete Offer listeners
   document.querySelectorAll(".btn-delete-offer").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
+    btn.addEventListener("click", async () => {
       const dealId = btn.getAttribute("data-deal-id");
       if (!confirm("Are you sure you want to delete this offer?")) return;
       await deleteDeal(dealId);
@@ -471,11 +628,9 @@ function renderOffers(deals) {
 
 // Delete Offer from CRM and UI (0ms Optimistic Removal)
 async function deleteDeal(dealId) {
-  // 1. Optimistically remove from DOM
   const card = document.getElementById(`offer-card-${dealId}`);
   if (card) card.remove();
 
-  // 2. Remove from local memory cache
   const cacheKey = currentPhone || currentName;
   if (cacheKey && contactCache.has(cacheKey)) {
     const cached = contactCache.get(cacheKey);
@@ -489,7 +644,6 @@ async function deleteDeal(dealId) {
     renderOffers([]);
   }
 
-  // 3. Send delete request to backend
   try {
     await fetch(`${serverUrl}/api/extension/deal`, {
       method: "POST",
@@ -506,7 +660,6 @@ async function deleteDeal(dealId) {
 
 // Update Stage of a specific offer
 async function updateDealStage(dealId, stageId) {
-  // Invalidate local cache
   const cacheKey = currentPhone || currentName;
   if (cacheKey) contactCache.delete(cacheKey);
 
@@ -519,17 +672,18 @@ async function updateDealStage(dealId, stageId) {
         stage_id: stageId,
       }),
     });
+
     if (res.ok) {
-      await fetchCrmContext(currentPhone, currentName, false);
+      const deal = currentDeals.find((d) => d.id === dealId);
+      if (deal) deal.stage_id = stageId;
     }
   } catch (err) {
     console.error("Failed to update deal stage:", err);
   }
 }
 
-// Update Status (Won / Lost) of a specific offer (Triggers Meta CAPI!)
+// Update Deal Status (Won / Lost / Open) with Meta CAPI trigger
 async function updateDealStatus(dealId, status) {
-  // Invalidate local cache
   const cacheKey = currentPhone || currentName;
   if (cacheKey) contactCache.delete(cacheKey);
 
@@ -542,26 +696,27 @@ async function updateDealStatus(dealId, status) {
         status: status,
       }),
     });
-    if (res.ok) {
-      await fetchCrmContext(currentPhone, currentName, false);
-    }
+
+    if (!res.ok) throw new Error("Failed to update deal status");
+
+    await fetchCrmContext(currentPhone, currentName, false);
   } catch (err) {
-    console.error("Failed to update deal status:", err);
+    alert("Error updating status: " + err.message);
   }
 }
 
 // Render Timeline Activities
-function renderTimeline(acts) {
-  if (!acts || acts.length === 0) {
+function renderTimeline(activities) {
+  if (!activities || activities.length === 0) {
     timelineList.innerHTML = `<div style="color: #64748b; font-size: 11px;">No activities recorded yet.</div>`;
     return;
   }
 
-  timelineList.innerHTML = acts
+  timelineList.innerHTML = activities
     .map(
       (a) => `
     <div class="timeline-item">
-      <div class="timeline-title">${a.title || a.type}</div>
+      <div class="timeline-title">${a.title || "CRM Event"}</div>
       <div class="timeline-time">${new Date(a.scheduled_at || a.created_at).toLocaleDateString()} — ${(a.status || "COMPLETED").toUpperCase()}</div>
       ${a.description ? `<div style="color: #cbd5e1; margin-top: 2px;">${a.description}</div>` : ""}
     </div>
@@ -629,4 +784,4 @@ window.addEventListener("message", (event) => {
 initSession();
 setTimeout(() => {
   window.parent.postMessage({ type: "WAPI_REQUEST_ACTIVE_PHONE" }, "*");
-}, 200);
+}, 500);

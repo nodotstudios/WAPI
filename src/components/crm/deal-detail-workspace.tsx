@@ -269,6 +269,37 @@ export function DealDetailWorkspace({
                         )}
                       </span>
 
+                      {deal.contact?.phone && (
+                        <div className="flex items-center gap-1.5 py-0.5">
+                          <a
+                            href={`tel:${deal.contact.phone.replace(/\s+/g, "")}`}
+                            title="Call client (PC/Phone dialer)"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-colors shadow-sm"
+                          >
+                            <Phone className="size-3" />
+                            Call
+                          </a>
+                          <a
+                            href={`sms:${deal.contact.phone.replace(/\s+/g, "")}`}
+                            title="Send SMS / Message"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 transition-colors shadow-sm"
+                          >
+                            <MessageSquare className="size-3" />
+                            Message
+                          </a>
+                          <a
+                            href={`https://web.whatsapp.com/send?phone=${deal.contact.phone.replace(/\D/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open in WhatsApp Web"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                          >
+                            <Send className="size-3" />
+                            WhatsApp ↗
+                          </a>
+                        </div>
+                      )}
+
                       {deal.assignee && (
                         <span className="flex items-center gap-1">
                           👤 Owner: <strong className="text-foreground">{deal.assignee.full_name || deal.assignee.email}</strong>
@@ -627,15 +658,31 @@ export function DealDetailWorkspace({
                           Contact Information
                         </h4>
                         {deal.contact?.phone && (
-                          <a
-                            href={`https://web.whatsapp.com/send?phone=${deal.contact.phone.replace(/\D/g, "")}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-                          >
-                            <MessageSquare className="size-3.5" />
-                            Open in WhatsApp Web ↗
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={`tel:${deal.contact.phone.replace(/\s+/g, "")}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 transition-colors shadow-sm"
+                            >
+                              <Phone className="size-3.5" />
+                              Call
+                            </a>
+                            <a
+                              href={`sms:${deal.contact.phone.replace(/\s+/g, "")}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 transition-colors shadow-sm"
+                            >
+                              <MessageSquare className="size-3.5" />
+                              Message
+                            </a>
+                            <a
+                              href={`https://web.whatsapp.com/send?phone=${deal.contact.phone.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                            >
+                              <Send className="size-3.5" />
+                              WhatsApp ↗
+                            </a>
+                          </div>
                         )}
                       </div>
 

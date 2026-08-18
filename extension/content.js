@@ -1,7 +1,7 @@
 /**
  * WAPI CRM Extension Content Script
  * Injected into https://web.whatsapp.com
- * Blazing Fast 0ms Click & Mutation Detection
+ * Blazing Fast 0ms Click & Mutation Detection + Moveable Floating WAPI Button
  */
 
 (function () {
@@ -13,25 +13,119 @@
   let panelVisible = true;
   let debounceTimer = null;
 
-  // Create & Inject Floating Toggle Button
+  // Create & Inject Floating Draggable Toggle Button
   function injectToggleButton() {
     if (document.getElementById("wapi-toggle-btn")) return;
 
     toggleBtn = document.createElement("button");
     toggleBtn.id = "wapi-toggle-btn";
+    toggleBtn.title = "WAPI CRM (Drag anywhere or click to toggle)";
     toggleBtn.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
       </svg>
-      <span>WAPI CRM</span>
     `;
     toggleBtn.className = "wapi-fab-button";
-    toggleBtn.addEventListener("click", () => {
-      panelVisible = !panelVisible;
-      if (panelIframe) {
-        panelIframe.style.display = panelVisible ? "block" : "none";
+
+    // Restore saved position if available
+    try {
+      const savedPos = localStorage.getItem("wapi_fab_pos");
+      if (savedPos) {
+        const parsed = JSON.parse(savedPos);
+        if (typeof parsed.left === "number" && typeof parsed.top === "number") {
+          const maxLeft = Math.max(10, window.innerWidth - 56);
+          const maxTop = Math.max(10, window.innerHeight - 56);
+          const safeLeft = Math.min(Math.max(10, parsed.left), maxLeft);
+          const safeTop = Math.min(Math.max(10, parsed.top), maxTop);
+          toggleBtn.style.left = safeLeft + "px";
+          toggleBtn.style.top = safeTop + "px";
+          toggleBtn.style.right = "auto";
+          toggleBtn.style.bottom = "auto";
+        }
       }
-    });
+    } catch (e) {}
+
+    // Implement Dragging and Click Handling
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+    let dragDistance = 0;
+
+    function onPointerDown(e) {
+      isDragging = true;
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+
+      startX = clientX;
+      startY = clientY;
+      dragDistance = 0;
+
+      const rect = toggleBtn.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      toggleBtn.style.transition = "none";
+      document.addEventListener("mousemove", onPointerMove);
+      document.addEventListener("mouseup", onPointerUp);
+      document.addEventListener("touchmove", onPointerMove, { passive: false });
+      document.addEventListener("touchend", onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      if (e.cancelable) e.preventDefault();
+
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+      dragDistance = Math.hypot(dx, dy);
+
+      const maxLeft = Math.max(10, window.innerWidth - 56);
+      const maxTop = Math.max(10, window.innerHeight - 56);
+
+      const newLeft = Math.min(Math.max(10, initialLeft + dx), maxLeft);
+      const newTop = Math.min(Math.max(10, initialTop + dy), maxTop);
+
+      toggleBtn.style.left = newLeft + "px";
+      toggleBtn.style.top = newTop + "px";
+      toggleBtn.style.right = "auto";
+      toggleBtn.style.bottom = "auto";
+    }
+
+    function onPointerUp() {
+      if (!isDragging) return;
+      isDragging = false;
+      toggleBtn.style.transition = "transform 0.15s ease, box-shadow 0.15s ease";
+
+      document.removeEventListener("mousemove", onPointerMove);
+      document.removeEventListener("mouseup", onPointerUp);
+      document.removeEventListener("touchmove", onPointerMove);
+      document.removeEventListener("touchend", onPointerUp);
+
+      if (dragDistance > 6) {
+        // Saved dragged position
+        try {
+          const rect = toggleBtn.getBoundingClientRect();
+          localStorage.setItem(
+            "wapi_fab_pos",
+            JSON.stringify({ left: Math.round(rect.left), top: Math.round(rect.top) })
+          );
+        } catch (e) {}
+      } else {
+        // User clicked (not dragged) -> Toggle Panel
+        panelVisible = !panelVisible;
+        if (panelIframe) {
+          panelIframe.style.display = panelVisible ? "block" : "none";
+        }
+      }
+    }
+
+    toggleBtn.addEventListener("mousedown", onPointerDown);
+    toggleBtn.addEventListener("touchstart", onPointerDown, { passive: false });
 
     document.body.appendChild(toggleBtn);
   }
@@ -98,32 +192,46 @@
     }
   }
 
-  // Fast direct click listener on WhatsApp chat list
-  function setupChatClickListeners() {
-    document.addEventListener("click", (e) => {
-      // If clicked inside chat list or main container, check immediately
-      if (e.target.closest("#pane-side") || e.target.closest("div[role='listitem']")) {
-        setTimeout(checkAndNotify, 50);
-        setTimeout(checkAndNotify, 250);
-      }
-    }, true);
+  // Listen for direct clicks on the WhatsApp chat list container (#pane-side)
+  function attachChatListClickListener() {
+    const paneSide = document.querySelector("#pane-side");
+    if (paneSide && !paneSide.__wapi_listening) {
+      paneSide.__wapi_listening = true;
+      paneSide.addEventListener(
+        "click",
+        () => {
+          setTimeout(checkAndNotify, 30);
+          setTimeout(checkAndNotify, 150);
+        },
+        true
+      );
+    }
   }
 
-  // Lightweight MutationObserver targeted specifically on #main
-  function observeChatHeader() {
+  // Observe chat switching
+  function observeWhatsApp() {
+    injectSidePanel();
+    injectToggleButton();
+    attachChatListClickListener();
+
+    // Lightweight observer focused exclusively on header mutations
     const observer = new MutationObserver(() => {
+      attachChatListClickListener();
+
       if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(checkAndNotify, 100);
+      debounceTimer = setTimeout(() => {
+        checkAndNotify();
+      }, 50);
     });
 
-    const target = document.getElementById("main") || document.body;
-    observer.observe(target, {
+    observer.observe(document.body, {
       childList: true,
       subtree: true,
+      attributes: false,
     });
   }
 
-  // Listen for messages from panel
+  // Handle messages from the iframe panel
   window.addEventListener("message", (event) => {
     if (event.data && event.data.type === "WAPI_REQUEST_ACTIVE_PHONE") {
       const contact = extractActiveContact();
@@ -134,18 +242,10 @@
     }
   });
 
-  // Initialization after WhatsApp Web UI loads
-  function init() {
-    injectToggleButton();
-    injectSidePanel();
-    setupChatClickListeners();
-    observeChatHeader();
-    setTimeout(checkAndNotify, 1000);
-  }
-
+  // Start observing once DOM is ready
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", observeWhatsApp);
   } else {
-    init();
+    observeWhatsApp();
   }
 })();

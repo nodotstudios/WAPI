@@ -2,61 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WAPI CRM Panel</title>
+  <title>WAPI CRM Side Panel</title>
   <style>
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     body {
-      background-color: #090d16;
+      background-color: #0b1120;
       color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 13px;
-      line-height: 1.4;
-      height: 100vh;
-      overflow-y: auto;
       padding: 14px;
+      overflow-y: auto;
     }
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      margin-bottom: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
     }
-    .logo-row {
+    .brand {
       display: flex;
       align-items: center;
-      gap: 8px;
-    }
-    .logo-badge {
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: white;
-      padding: 4px 8px;
-      border-radius: 6px;
+      gap: 6px;
       font-weight: 800;
-      font-size: 11px;
-      letter-spacing: 0.5px;
+      font-size: 15px;
+      letter-spacing: -0.3px;
+      color: #10b981;
     }
-    .title {
-      font-weight: 700;
-      font-size: 14px;
-      color: #f1f5f9;
+    .brand span {
+      color: #f8fafc;
+      font-weight: 500;
+      font-size: 12px;
     }
     .user-pill {
       display: flex;
       align-items: center;
       gap: 6px;
-      background: rgba(255, 255, 255, 0.06);
+      background: #1e293b;
       padding: 4px 8px;
       border-radius: 9999px;
       font-size: 11px;
+      color: #94a3b8;
+      border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    .user-dot {
+    .status-dot {
       width: 7px;
       height: 7px;
       border-radius: 50%;
@@ -198,15 +192,15 @@
       width: 100%;
       padding: 8px;
       border-radius: 6px;
+      font-size: 12px;
       font-weight: 600;
-      font-size: 11px;
       cursor: pointer;
       border: none;
       transition: all 0.15s ease;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 5px;
+      gap: 4px;
     }
     .btn-primary {
       background: #10b981;
@@ -218,105 +212,150 @@
     .btn-won {
       background: rgba(16, 185, 129, 0.15);
       color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.4);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 6px 8px;
+      font-size: 11px;
     }
     .btn-won:hover {
-      background: rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.25);
     }
     .btn-lost {
       background: rgba(239, 68, 68, 0.15);
       color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.4);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 6px 8px;
+      font-size: 11px;
     }
     .btn-lost:hover {
-      background: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.25);
     }
-    .btn-delete {
-      background: none;
-      color: #94a3b8;
+    .btn-action-icon {
+      background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 6px;
-      font-size: 10px;
+      color: #cbd5e1;
+      border-radius: 5px;
+      padding: 3px 6px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
     }
-    .btn-delete:hover {
-      background: rgba(239, 68, 68, 0.2);
-      color: #f87171;
-      border-color: rgba(239, 68, 68, 0.5);
+    .btn-action-icon:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+    .btn-delete-offer {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .btn-delete-offer:hover {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    .btn-edit-offer {
+      background: none;
+      border: none;
+      color: #38bdf8;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .btn-edit-offer:hover {
+      color: #60a5fa;
+      background: rgba(56, 189, 248, 0.1);
     }
     .badge {
-      display: inline-block;
+      font-size: 10px;
       padding: 2px 6px;
       border-radius: 9999px;
-      font-size: 9px;
-      font-weight: 700;
-      background: rgba(59, 130, 246, 0.2);
-      color: #60a5fa;
+      font-weight: 600;
+      text-transform: uppercase;
     }
     .badge-won {
       background: rgba(16, 185, 129, 0.2);
       color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
     }
     .badge-lost {
       background: rgba(239, 68, 68, 0.2);
       color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .badge-open {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+    .new-offer-box {
+      display: none;
+      background: #090d16;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .edit-offer-box {
+      display: none;
+      background: #0f172a;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
     }
     .timeline-item {
       padding: 8px;
       background: #0f172a;
-      border-radius: 8px;
-      border-left: 3px solid #10b981;
+      border-left: 2px solid #10b981;
+      border-radius: 4px;
       margin-bottom: 6px;
       font-size: 11px;
     }
     .timeline-title {
       font-weight: 600;
-      color: #f1f5f9;
+      color: #f8fafc;
     }
     .timeline-time {
       color: #64748b;
       font-size: 10px;
+      margin-top: 2px;
     }
     .error-box {
+      display: none;
       background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.4);
+      border: 1px solid rgba(239, 68, 68, 0.3);
       color: #f87171;
-      padding: 8px 10px;
-      border-radius: 8px;
+      padding: 8px;
+      border-radius: 6px;
       font-size: 11px;
-      margin-top: 10px;
-      display: none;
-    }
-    .new-offer-box {
-      display: none;
-      background: #0f172a;
-      border: 1px dashed #10b981;
-      border-radius: 10px;
-      padding: 10px;
-      margin-bottom: 10px;
+      margin-top: 8px;
     }
   </style>
 </head>
 <body>
 
-  <!-- Top App Header -->
+  <!-- HEADER -->
   <div class="header">
-    <div class="logo-row">
-      <span class="logo-badge">WAPI</span>
-      <span class="title">CRM Side Panel</span>
+    <div class="brand">
+      ⚡ WAPI <span>Sales CRM</span>
     </div>
-    <div id="auth-status-container" style="display: none;">
-      <div class="user-pill">
-        <div class="user-dot"></div>
-        <span id="user-display-name">Logged In</span>
-        <button id="btn-logout" class="logout-btn" title="Sign out">Log out</button>
-      </div>
+    <div class="user-pill">
+      <span class="status-dot"></span>
+      <span id="user-display">Connecting...</span>
+      <button id="btn-logout" class="logout-btn" style="display: none;">Logout</button>
     </div>
   </div>
 
   <!-- 1. LOGIN VIEW -->
-  <div id="view-login" style="margin-top: 30px;">
-    <div class="card" style="padding: 16px;">
-      <h3 style="color: #f8fafc; font-size: 15px; margin-bottom: 4px;">Sign in to WAPI CRM</h3>
+  <div id="view-login">
+    <div class="card">
+      <div style="font-weight: 700; font-size: 14px; margin-bottom: 6px; color: #f8fafc;">
+        Sign In to WAPI CRM
+      </div>
       <p style="color: #94a3b8; font-size: 11px; margin-bottom: 12px;">
         Use your WAPI email and password to connect your WhatsApp Web CRM.
       </p>
@@ -365,6 +404,12 @@
         <div style="font-weight: 700; font-size: 12px; color: #10b981; margin-bottom: 4px;">
           Create New Lead / Offer
         </div>
+
+        <label>✨ Offer Template / Predefined Package</label>
+        <select id="new-offer-template">
+          <option value="">-- Custom Offer (No Template) --</option>
+        </select>
+
         <label>Offer / Deal Title</label>
         <input type="text" id="new-offer-title" placeholder="e.g. Website Redesign Package">
 
@@ -393,6 +438,50 @@
         <div class="flex-row" style="margin-top: 10px;">
           <button id="btn-save-new-offer" class="btn btn-primary" style="flex: 2;">Create Offer</button>
           <button id="btn-cancel-new-offer" class="btn btn-lost" style="flex: 1;">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Edit Existing Offer Form -->
+      <div id="edit-offer-box" class="edit-offer-box">
+        <input type="hidden" id="edit-offer-id">
+        <div style="font-weight: 700; font-size: 12px; color: #38bdf8; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+          <span>✏️ Edit Offer</span>
+          <span id="edit-offer-badge" class="badge badge-open">Editing</span>
+        </div>
+
+        <label>✨ Apply Template (Optional)</label>
+        <select id="edit-offer-template">
+          <option value="">-- Keep Current / Custom --</option>
+        </select>
+
+        <label>Offer Title</label>
+        <input type="text" id="edit-offer-title" placeholder="e.g. Premium Retainer">
+
+        <div class="flex-row">
+          <div style="flex: 2;">
+            <label>Value</label>
+            <input type="number" id="edit-offer-value" placeholder="0.00" value="0">
+          </div>
+          <div style="flex: 1;">
+            <label>Currency</label>
+            <select id="edit-offer-currency">
+              <option value="USD">USD</option>
+              <option value="INR">INR</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="AED">AED</option>
+            </select>
+          </div>
+        </div>
+
+        <label>Pipeline Stage</label>
+        <select id="edit-offer-stage">
+          <option value="">Select Stage</option>
+        </select>
+
+        <div class="flex-row" style="margin-top: 10px;">
+          <button id="btn-save-edit-offer" class="btn btn-primary" style="flex: 2;">Save Changes</button>
+          <button id="btn-cancel-edit-offer" class="btn btn-lost" style="flex: 1;">Cancel</button>
         </div>
       </div>
 

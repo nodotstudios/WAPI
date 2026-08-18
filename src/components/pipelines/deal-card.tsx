@@ -1,7 +1,7 @@
 "use client";
 
 import type { Deal, PipelineStage } from "@/types";
-import { Calendar, Check, X, MessageSquare } from "lucide-react";
+import { Calendar, Check, X, MessageSquare, Phone, MessageCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 import { useTranslations } from "next-intl";
 
@@ -72,7 +72,7 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
         )}
       </div>
 
-      {/* Contact row with direct Chat button */}
+      {/* Contact row with direct Call, Message, and WhatsApp buttons */}
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground">
@@ -81,19 +81,31 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
           <span className="truncate text-xs text-muted-foreground">{contactLabel}</span>
         </div>
         {deal.contact?.phone && (
-          <a
-            href={`https://web.whatsapp.com/send?phone=${deal.contact.phone.replace(/\D/g, "")}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-            title="Open Chat in WhatsApp Web"
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-          >
-            <MessageSquare className="size-3" />
-            WhatsApp ↗
-          </a>
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={`tel:${deal.contact.phone.replace(/\s+/g, "")}`}
+              title="Call"
+              className="inline-flex size-6 items-center justify-center rounded-md border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
+            >
+              <Phone className="size-3" />
+            </a>
+            <a
+              href={`sms:${deal.contact.phone.replace(/\s+/g, "")}`}
+              title="Send Message"
+              className="inline-flex size-6 items-center justify-center rounded-md border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+            >
+              <MessageSquare className="size-3" />
+            </a>
+            <a
+              href={`https://web.whatsapp.com/send?phone=${deal.contact.phone.replace(/\D/g, "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="WhatsApp"
+              className="inline-flex size-6 items-center justify-center rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+            >
+              <MessageCircle className="size-3" />
+            </a>
+          </div>
         )}
       </div>
 

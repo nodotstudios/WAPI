@@ -49,14 +49,25 @@ export async function GET(request: Request) {
       finalUserId = member?.user_id;
     }
 
-    // 1. Fetch default pipeline and stages for account
-    const { data: pipeline } = await supabase
-      .from("pipelines")
-      .select("id, name")
-      .eq("account_id", accountId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    // 1. Fetch default pipeline, stages, and active offerings in parallel
+    const [pipelineRes, offeringsRes] = await Promise.all([
+      supabase
+        .from("pipelines")
+        .select("id, name")
+        .eq("account_id", accountId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("deal_offerings")
+        .select("id, title, description, value, currency")
+        .eq("account_id", accountId)
+        .eq("is_active", true)
+        .order("title", { ascending: true }),
+    ]);
+
+    const pipeline = pipelineRes.data;
+    const offerings = offeringsRes.data || [];
 
     let stages: Array<{ id: string; name: string; color: string; position: number }> = [];
     if (pipeline?.id) {
@@ -77,6 +88,7 @@ export async function GET(request: Request) {
           contact: null,
           deals: [],
           stages: stages,
+          offerings: offerings,
           activities: [],
         },
         { headers: corsHeaders() }
@@ -153,6 +165,7 @@ export async function GET(request: Request) {
         contact: contact,
         deals: deals,
         stages: stages,
+        offerings: offerings,
         activities: activities,
       },
       { headers: corsHeaders() }
