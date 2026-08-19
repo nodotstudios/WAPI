@@ -1,19 +1,69 @@
 /**
  * WAPI CRM Extension Content Script
  * Injected into https://web.whatsapp.com
- * Blazing Fast 0ms Click & Mutation Detection + Moveable Floating WAPI Button
+ * Supercharged Features:
+ * 1. 0ms Fast Chat Detection & Draggable Floating Action Button
+ * 2. Visual Pipeline Stage & Deal Value Badges on WhatsApp Chat List
+ * 3. Instant Pipeline Stage & Urgency Filter Bar above Chat List
+ * 4. Quick Responses Engine with Direct Image/Document Media Injection
+ * 5. Collapsible "Today's Schedule & Follow-ups" Calendar Drawer
  */
 
 (function () {
-  console.log("[WAPI Extension] Fast content script initialized on WhatsApp Web");
+  console.log("[WAPI Extension] Supercharged content script initialized on WhatsApp Web");
 
   let activePhone = null;
   let panelIframe = null;
   let toggleBtn = null;
+  let todayFab = null;
+  let scheduleDrawer = null;
+  let quickPopup = null;
   let panelVisible = true;
   let debounceTimer = null;
 
-  // Create & Inject Floating Draggable Toggle Button
+  // Cached CRM Data
+  let crmStages = [];
+  let crmAllDealsMap = {};
+  let crmTodayActivities = [];
+  let crmQuickReplies = [];
+  let activeFilterStage = "ALL";
+
+  function cleanDigits(str) {
+    return (str || "").replace(/\D/g, "");
+  }
+
+  // =================================================================
+  // 1. Fetch CRM Global Context (Badges, Filters, Schedule, Snippets)
+  // =================================================================
+  async function fetchGlobalContext() {
+    try {
+      const token = localStorage.getItem("wapi_auth_token") || "";
+      const res = await fetch("https://wapi.chat/api/extension/context", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }).catch(() => null);
+
+      if (!res || !res.ok) return;
+      const data = await res.json().catch(() => ({}));
+
+      if (data.success) {
+        crmStages = data.stages || [];
+        crmAllDealsMap = data.all_deals_map || {};
+        crmTodayActivities = data.today_activities || [];
+        crmQuickReplies = data.quick_replies || [];
+
+        updateTodayFab();
+        updateFilterBar();
+        injectBadgesIntoChatList();
+        renderScheduleDrawerContent();
+      }
+    } catch (e) {
+      console.warn("[WAPI] Fetch global context error:", e);
+    }
+  }
+
+  // =================================================================
+  // 2. Main Draggable Floating Action Button (FAB)
+  // =================================================================
   function injectToggleButton() {
     if (document.getElementById("wapi-toggle-btn")) return;
 
@@ -27,7 +77,7 @@
     `;
     toggleBtn.className = "wapi-fab-button";
 
-    // Restore saved position if available
+    // Restore saved position
     try {
       const savedPos = localStorage.getItem("wapi_fab_pos");
       if (savedPos) {
@@ -35,38 +85,30 @@
         if (typeof parsed.left === "number" && typeof parsed.top === "number") {
           const maxLeft = Math.max(10, window.innerWidth - 56);
           const maxTop = Math.max(10, window.innerHeight - 56);
-          const safeLeft = Math.min(Math.max(10, parsed.left), maxLeft);
-          const safeTop = Math.min(Math.max(10, parsed.top), maxTop);
-          toggleBtn.style.left = safeLeft + "px";
-          toggleBtn.style.top = safeTop + "px";
+          toggleBtn.style.left = Math.min(Math.max(10, parsed.left), maxLeft) + "px";
+          toggleBtn.style.top = Math.min(Math.max(10, parsed.top), maxTop) + "px";
           toggleBtn.style.right = "auto";
           toggleBtn.style.bottom = "auto";
         }
       }
     } catch (e) {}
 
-    // Implement Dragging and Click Handling
     let isDragging = false;
-    let startX = 0;
-    let startY = 0;
-    let initialLeft = 0;
-    let initialTop = 0;
-    let dragDistance = 0;
+    let startX = 0, startY = 0, initialLeft = 0, initialTop = 0, dragDist = 0;
 
     function onPointerDown(e) {
       isDragging = true;
       const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
       const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
-
       startX = clientX;
       startY = clientY;
-      dragDistance = 0;
+      dragDist = 0;
 
       const rect = toggleBtn.getBoundingClientRect();
       initialLeft = rect.left;
       initialTop = rect.top;
-
       toggleBtn.style.transition = "none";
+
       document.addEventListener("mousemove", onPointerMove);
       document.addEventListener("mouseup", onPointerUp);
       document.addEventListener("touchmove", onPointerMove, { passive: false });
@@ -76,22 +118,16 @@
     function onPointerMove(e) {
       if (!isDragging) return;
       if (e.cancelable) e.preventDefault();
-
       const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
       const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
-
       const dx = clientX - startX;
       const dy = clientY - startY;
-      dragDistance = Math.hypot(dx, dy);
+      dragDist = Math.hypot(dx, dy);
 
       const maxLeft = Math.max(10, window.innerWidth - 56);
       const maxTop = Math.max(10, window.innerHeight - 56);
-
-      const newLeft = Math.min(Math.max(10, initialLeft + dx), maxLeft);
-      const newTop = Math.min(Math.max(10, initialTop + dy), maxTop);
-
-      toggleBtn.style.left = newLeft + "px";
-      toggleBtn.style.top = newTop + "px";
+      toggleBtn.style.left = Math.min(Math.max(10, initialLeft + dx), maxLeft) + "px";
+      toggleBtn.style.top = Math.min(Math.max(10, initialTop + dy), maxTop) + "px";
       toggleBtn.style.right = "auto";
       toggleBtn.style.bottom = "auto";
     }
@@ -106,17 +142,12 @@
       document.removeEventListener("touchmove", onPointerMove);
       document.removeEventListener("touchend", onPointerUp);
 
-      if (dragDistance > 6) {
-        // Saved dragged position
+      if (dragDist > 6) {
         try {
           const rect = toggleBtn.getBoundingClientRect();
-          localStorage.setItem(
-            "wapi_fab_pos",
-            JSON.stringify({ left: Math.round(rect.left), top: Math.round(rect.top) })
-          );
+          localStorage.setItem("wapi_fab_pos", JSON.stringify({ left: Math.round(rect.left), top: Math.round(rect.top) }));
         } catch (e) {}
       } else {
-        // User clicked (not dragged) -> Toggle Panel
         panelVisible = !panelVisible;
         if (panelIframe) {
           panelIframe.style.display = panelVisible ? "block" : "none";
@@ -126,14 +157,14 @@
 
     toggleBtn.addEventListener("mousedown", onPointerDown);
     toggleBtn.addEventListener("touchstart", onPointerDown, { passive: false });
-
     document.body.appendChild(toggleBtn);
   }
 
-  // Create & Inject Side Panel Iframe
+  // =================================================================
+  // 3. Side Panel Iframe
+  // =================================================================
   function injectSidePanel() {
     if (document.getElementById("wapi-crm-iframe")) return;
-
     panelIframe = document.createElement("iframe");
     panelIframe.id = "wapi-crm-iframe";
     panelIframe.src = chrome.runtime.getURL("panel.html");
@@ -141,13 +172,445 @@
     document.body.appendChild(panelIframe);
   }
 
-  // Extract phone number and name from WhatsApp Web DOM
+  // =================================================================
+  // 4. Visual Pipeline Badges on WhatsApp Web Chat Rows
+  // =================================================================
+  function injectBadgesIntoChatList() {
+    const chatRows = document.querySelectorAll("#pane-side div[role='listitem'], #pane-side div[tabindex='-1']");
+    if (!chatRows || chatRows.length === 0) return;
+
+    chatRows.forEach((row) => {
+      // Find contact title/name in row
+      const titleSpan = row.querySelector("span[title]") || row.querySelector("div[role='gridcell'] span");
+      if (!titleSpan) return;
+
+      const titleText = titleSpan.getAttribute("title") || titleSpan.textContent || "";
+      const digits = cleanDigits(titleText);
+      const nameKey = titleText.trim().toLowerCase();
+
+      const dealInfo = crmAllDealsMap[digits] || (digits.length >= 10 ? crmAllDealsMap[digits.slice(-10)] : null) || crmAllDealsMap[nameKey];
+
+      // Remove existing badge container if present
+      const existing = row.querySelector(".wapi-badge-container");
+      if (existing) existing.remove();
+
+      if (dealInfo) {
+        const badgeContainer = document.createElement("span");
+        badgeContainer.className = "wapi-badge-container";
+
+        // 1. Stage Badge
+        const stageBadge = document.createElement("span");
+        stageBadge.className = "wapi-chat-badge";
+        stageBadge.textContent = dealInfo.stage_name;
+        stageBadge.style.backgroundColor = `${dealInfo.stage_color || "#10b981"}25`;
+        stageBadge.style.color = dealInfo.stage_color || "#10b981";
+        stageBadge.style.border = `1px solid ${dealInfo.stage_color || "#10b981"}50`;
+        badgeContainer.appendChild(stageBadge);
+
+        // 2. Value Badge (if > 0)
+        if (dealInfo.value > 0) {
+          const valBadge = document.createElement("span");
+          valBadge.className = "wapi-value-badge";
+          valBadge.textContent = `${dealInfo.currency === "USD" ? "$" : dealInfo.currency + " "}${Number(dealInfo.value).toLocaleString()}`;
+          badgeContainer.appendChild(valBadge);
+        }
+
+        // 3. Urgency / Due Today Badge
+        if (dealInfo.is_due_today) {
+          const dueBadge = document.createElement("span");
+          dueBadge.className = "wapi-due-badge";
+          dueBadge.textContent = "🔥 Due Today";
+          badgeContainer.appendChild(dueBadge);
+        }
+
+        titleSpan.parentElement?.appendChild(badgeContainer);
+      }
+    });
+
+    applyChatListFilter();
+  }
+
+  // =================================================================
+  // 5. Instant Pipeline Stage & Urgency Filter Bar
+  // =================================================================
+  function updateFilterBar() {
+    const paneSide = document.querySelector("#pane-side");
+    if (!paneSide) return;
+
+    let filterBar = document.getElementById("wapi-filter-bar");
+    if (!filterBar) {
+      filterBar = document.createElement("div");
+      filterBar.id = "wapi-filter-bar";
+      filterBar.className = "wapi-filter-bar";
+      paneSide.parentElement?.insertBefore(filterBar, paneSide);
+    }
+
+    // Compute counts
+    const totalDeals = Object.keys(crmAllDealsMap).length;
+    const dueCount = Object.values(crmAllDealsMap).filter((d) => d.is_due_today).length;
+
+    let chipsHtml = `
+      <button type="button" class="wapi-filter-chip ${activeFilterStage === "ALL" ? "active" : ""}" data-stage="ALL">
+        All Chats
+      </button>
+    `;
+
+    if (dueCount > 0) {
+      chipsHtml += `
+        <button type="button" class="wapi-filter-chip due-chip ${activeFilterStage === "DUE_TODAY" ? "active" : ""}" data-stage="DUE_TODAY">
+          🔥 Due Today (${dueCount})
+        </button>
+      `;
+    }
+
+    crmStages.forEach((stg) => {
+      const stageCount = Object.values(crmAllDealsMap).filter((d) => d.stage_id === stg.id).length;
+      if (stageCount > 0) {
+        chipsHtml += `
+          <button type="button" class="wapi-filter-chip ${activeFilterStage === stg.id ? "active" : ""}" data-stage="${stg.id}">
+            ${stg.name} (${stageCount})
+          </button>
+        `;
+      }
+    });
+
+    filterBar.innerHTML = chipsHtml;
+
+    filterBar.querySelectorAll(".wapi-filter-chip").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeFilterStage = btn.getAttribute("data-stage") || "ALL";
+        updateFilterBar();
+        applyChatListFilter();
+      });
+    });
+  }
+
+  function applyChatListFilter() {
+    const chatRows = document.querySelectorAll("#pane-side div[role='listitem'], #pane-side div[tabindex='-1']");
+    if (!chatRows || chatRows.length === 0) return;
+
+    chatRows.forEach((row) => {
+      if (activeFilterStage === "ALL") {
+        row.style.display = "";
+        return;
+      }
+
+      const titleSpan = row.querySelector("span[title]") || row.querySelector("div[role='gridcell'] span");
+      if (!titleSpan) return;
+
+      const titleText = titleSpan.getAttribute("title") || titleSpan.textContent || "";
+      const digits = cleanDigits(titleText);
+      const nameKey = titleText.trim().toLowerCase();
+
+      const dealInfo = crmAllDealsMap[digits] || (digits.length >= 10 ? crmAllDealsMap[digits.slice(-10)] : null) || crmAllDealsMap[nameKey];
+
+      if (activeFilterStage === "DUE_TODAY") {
+        row.style.display = dealInfo && dealInfo.is_due_today ? "" : "none";
+      } else {
+        row.style.display = dealInfo && dealInfo.stage_id === activeFilterStage ? "" : "none";
+      }
+    });
+  }
+
+  // =================================================================
+  // 6. Direct Media & File Injection into WhatsApp Web
+  // =================================================================
+  async function injectMediaIntoWhatsApp(mediaUrl, filename, captionText) {
+    try {
+      console.log("[WAPI] Fetching media for direct injection:", mediaUrl);
+      const res = await fetch(mediaUrl);
+      const blob = await res.blob();
+      const mimeType = blob.type || "application/octet-stream";
+      const file = new File([blob], filename || "attachment", { type: mimeType });
+
+      // 1. Try WhatsApp Web native file input
+      const fileInputs = document.querySelectorAll("input[type='file']");
+      let targetInput = null;
+
+      for (const input of fileInputs) {
+        const accept = input.getAttribute("accept") || "";
+        if (mimeType.startsWith("image/") && accept.includes("image")) {
+          targetInput = input;
+          break;
+        }
+        if (!targetInput) targetInput = input;
+      }
+
+      if (targetInput) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        targetInput.files = dt.files;
+        targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+        console.log("[WAPI] Injected file directly via file input element");
+      } else {
+        // 2. Dispatch native Drag & Drop Event onto WhatsApp main chat area
+        const dropZone = document.querySelector("#main") || document.body;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+
+        dropZone.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        dropZone.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        dropZone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        console.log("[WAPI] Injected file directly via Drop Event");
+      }
+
+      // If caption text is provided, paste or insert into caption
+      if (captionText) {
+        setTimeout(() => {
+          const captionBox = document.querySelector("div[contenteditable='true'][role='textbox']");
+          if (captionBox) {
+            captionBox.focus();
+            document.execCommand("insertText", false, captionText);
+          }
+        }, 300);
+      }
+    } catch (e) {
+      console.error("[WAPI] Direct media injection failed:", e);
+    }
+  }
+
+  function injectTextIntoMessageInput(text) {
+    const input = document.querySelector("#main footer div[contenteditable='true'][role='textbox']");
+    if (input) {
+      input.focus();
+      document.execCommand("insertText", false, text);
+    }
+  }
+
+  // =================================================================
+  // 7. Quick Responses Trigger & Slash Command Popup
+  // =================================================================
+  function injectQuickResponseButton() {
+    const footer = document.querySelector("#main footer");
+    if (!footer || document.getElementById("wapi-quick-btn")) return;
+
+    const actionContainer = footer.querySelector("div[role='button']")?.parentElement || footer.firstElementChild;
+    if (!actionContainer) return;
+
+    const quickBtn = document.createElement("button");
+    quickBtn.id = "wapi-quick-btn";
+    quickBtn.className = "wapi-quick-btn";
+    quickBtn.title = "WAPI Quick Responses (or type / in chat)";
+    quickBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+      </svg>
+    `;
+
+    quickBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleQuickPopup();
+    });
+
+    actionContainer.insertBefore(quickBtn, actionContainer.firstChild);
+
+    // Listen for '/' key in message box
+    const msgBox = footer.querySelector("div[contenteditable='true'][role='textbox']");
+    if (msgBox && !msgBox.__wapi_slash_listening) {
+      msgBox.__wapi_slash_listening = true;
+      msgBox.addEventListener("keyup", (e) => {
+        const text = msgBox.textContent || "";
+        if (text.startsWith("/") && text.length <= 15) {
+          openQuickPopup(text.slice(1));
+        } else if (!text.startsWith("/")) {
+          closeQuickPopup();
+        }
+      });
+    }
+  }
+
+  function openQuickPopup(query = "") {
+    let popup = document.getElementById("wapi-quick-popup");
+    if (!popup) {
+      popup = document.createElement("div");
+      popup.id = "wapi-quick-popup";
+      popup.className = "wapi-quick-popup";
+      document.body.appendChild(popup);
+    }
+
+    const filtered = crmQuickReplies.filter((qr) => {
+      if (!query) return true;
+      const q = query.toLowerCase();
+      return (
+        qr.title.toLowerCase().includes(q) ||
+        (qr.content_text && qr.content_text.toLowerCase().includes(q)) ||
+        (qr.keywords && JSON.stringify(qr.keywords).toLowerCase().includes(q))
+      );
+    });
+
+    popup.innerHTML = `
+      <div class="wapi-quick-header">
+        <input type="text" class="wapi-quick-search" placeholder="Search templates & media (e.g. pitch, pricing)..." value="${query}" />
+      </div>
+      <div class="wapi-quick-list">
+        ${
+          filtered.length === 0
+            ? `<div style="padding: 16px; text-align: center; color: #8696a0; font-size: 11.5px;">No templates found. Add templates in Settings → Quick Responses.</div>`
+            : filtered
+                .map(
+                  (qr) => `
+          <div class="wapi-quick-item" data-id="${qr.id}">
+            <div class="wapi-quick-title">
+              <span>⚡ ${qr.title}</span>
+              ${qr.media_url ? `<span class="wapi-quick-media-pill">📎 ${qr.media_type === "image" ? "Image" : "Document"}</span>` : ""}
+            </div>
+            ${qr.content_text ? `<div class="wapi-quick-text">${qr.content_text}</div>` : ""}
+          </div>
+        `
+                )
+                .join("")
+        }
+      </div>
+    `;
+
+    popup.style.display = "flex";
+
+    const searchInput = popup.querySelector(".wapi-quick-search");
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.addEventListener("input", (e) => {
+        openQuickPopup(e.target.value);
+      });
+    }
+
+    popup.querySelectorAll(".wapi-quick-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        const id = item.getAttribute("data-id");
+        const template = crmQuickReplies.find((q) => q.id === id);
+        if (template) {
+          if (template.media_url) {
+            void injectMediaIntoWhatsApp(template.media_url, template.filename, template.content_text);
+          } else if (template.content_text) {
+            injectTextIntoMessageInput(template.content_text);
+          }
+        }
+        closeQuickPopup();
+      });
+    });
+  }
+
+  function closeQuickPopup() {
+    const popup = document.getElementById("wapi-quick-popup");
+    if (popup) popup.style.display = "none";
+  }
+
+  function toggleQuickPopup() {
+    const popup = document.getElementById("wapi-quick-popup");
+    if (popup && popup.style.display === "flex") {
+      closeQuickPopup();
+    } else {
+      openQuickPopup();
+    }
+  }
+
+  // =================================================================
+  // 8. Collapsible "Today's Schedule & Follow-ups" Calendar Drawer
+  // =================================================================
+  function updateTodayFab() {
+    if (document.getElementById("wapi-today-fab")) {
+      todayFab = document.getElementById("wapi-today-fab");
+    } else {
+      todayFab = document.createElement("button");
+      todayFab.id = "wapi-today-fab";
+      todayFab.className = "wapi-today-fab";
+      todayFab.addEventListener("click", toggleScheduleDrawer);
+      document.body.appendChild(todayFab);
+    }
+
+    const count = crmTodayActivities.length;
+    todayFab.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+      <span>📅 ${count} Due Today</span>
+    `;
+
+    todayFab.style.display = count > 0 ? "flex" : "none";
+  }
+
+  function toggleScheduleDrawer() {
+    if (!scheduleDrawer) {
+      scheduleDrawer = document.createElement("div");
+      scheduleDrawer.id = "wapi-schedule-drawer";
+      scheduleDrawer.className = "wapi-schedule-drawer";
+      document.body.appendChild(scheduleDrawer);
+    }
+
+    const isOpen = scheduleDrawer.classList.contains("open");
+    if (isOpen) {
+      scheduleDrawer.classList.remove("open");
+    } else {
+      renderScheduleDrawerContent();
+      scheduleDrawer.classList.add("open");
+    }
+  }
+
+  function renderScheduleDrawerContent() {
+    if (!scheduleDrawer) return;
+
+    const count = crmTodayActivities.length;
+    scheduleDrawer.innerHTML = `
+      <div class="wapi-schedule-header">
+        <div class="wapi-schedule-title">
+          <span>📅 Today's Follow-ups & Meetings (${count})</span>
+        </div>
+        <button type="button" class="wapi-schedule-close" id="wapi-close-drawer">✕</button>
+      </div>
+      <div class="wapi-schedule-content">
+        ${
+          count === 0
+            ? `<div style="padding: 24px; text-align: center; color: #8696a0; font-size: 12px;">🎉 All caught up! No pending follow-ups for today.</div>`
+            : crmTodayActivities
+                .map((act) => {
+                  const timeStr = act.scheduled_at ? new Date(act.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Today";
+                  return `
+            <div class="wapi-schedule-card">
+              <div class="wapi-schedule-card-top">
+                <span class="wapi-schedule-contact">👤 ${act.contact_name}</span>
+                <span class="wapi-schedule-time">⏰ ${timeStr}</span>
+              </div>
+              <div class="wapi-schedule-title-text">${act.type.toUpperCase()}: ${act.title}</div>
+              ${act.description ? `<div style="font-size: 11px; color: #8696a0;">${act.description}</div>` : ""}
+              <div class="wapi-schedule-actions">
+                <button type="button" class="wapi-schedule-btn wapi-schedule-btn-open" data-phone="${act.contact_phone}" data-name="${act.contact_name}">
+                  💬 Open Chat
+                </button>
+              </div>
+            </div>
+          `;
+                })
+                .join("")
+        }
+      </div>
+    `;
+
+    document.getElementById("wapi-close-drawer")?.addEventListener("click", () => {
+      scheduleDrawer.classList.remove("open");
+    });
+
+    scheduleDrawer.querySelectorAll(".wapi-schedule-btn-open").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const phone = btn.getAttribute("data-phone");
+        const name = btn.getAttribute("data-name");
+        if (phone) {
+          window.location.href = `https://web.whatsapp.com/send?phone=${phone.replace(/\D/g, "")}`;
+        }
+        scheduleDrawer.classList.remove("open");
+      });
+    });
+  }
+
+  // =================================================================
+  // 9. Extract Active Contact & Mutation Observer
+  // =================================================================
   function extractActiveContact() {
     try {
       const header = document.querySelector("#main header");
       if (!header) return { phone: null, name: null };
 
-      // 1. Try finding title or contact text in header
       const titleEl = header.querySelector("span[title]") || header.querySelector("div[role='button'] span");
       const titleText = (titleEl?.getAttribute("title") || titleEl?.textContent || "").trim();
       const titleDigits = titleText.replace(/\D/g, "");
@@ -155,7 +618,6 @@
       let phone = titleDigits.length >= 7 ? titleDigits : null;
       let name = titleDigits.length >= 7 ? null : titleText;
 
-      // 2. Check subtext or phone attributes in chat header
       if (!phone) {
         const subtextEl = header.querySelector("span.selectable-text") || header.querySelector("span[dir='auto']");
         if (subtextEl) {
@@ -170,7 +632,6 @@
     }
   }
 
-  // Send contact updates to panel iframe
   function notifyPanel(contactData) {
     if (!panelIframe || !panelIframe.contentWindow) return;
     panelIframe.contentWindow.postMessage(
@@ -190,9 +651,9 @@
       activePhone = currentId;
       notifyPanel(contact);
     }
+    injectQuickResponseButton();
   }
 
-  // Listen for direct clicks on the WhatsApp chat list container (#pane-side)
   function attachChatListClickListener() {
     const paneSide = document.querySelector("#pane-side");
     if (paneSide && !paneSide.__wapi_listening) {
@@ -208,20 +669,21 @@
     }
   }
 
-  // Observe chat switching
   function observeWhatsApp() {
     injectSidePanel();
     injectToggleButton();
     attachChatListClickListener();
+    void fetchGlobalContext();
 
-    // Lightweight observer focused exclusively on header mutations
     const observer = new MutationObserver(() => {
       attachChatListClickListener();
+      injectBadgesIntoChatList();
+      injectQuickResponseButton();
 
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         checkAndNotify();
-      }, 50);
+      }, 60);
     });
 
     observer.observe(document.body, {
@@ -229,9 +691,12 @@
       subtree: true,
       attributes: false,
     });
+
+    // Periodically refresh global context every 45s
+    setInterval(fetchGlobalContext, 45000);
   }
 
-  // Handle messages from the iframe panel
+  // Handle messages from panel iframe
   window.addEventListener("message", (event) => {
     if (event.data && event.data.type === "WAPI_REQUEST_ACTIVE_PHONE") {
       const contact = extractActiveContact();
@@ -240,9 +705,11 @@
         notifyPanel(contact);
       }
     }
+    if (event.data && event.data.type === "WAPI_REFRESH_CONTEXT") {
+      void fetchGlobalContext();
+    }
   });
 
-  // Start observing once DOM is ready
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", observeWhatsApp);
   } else {

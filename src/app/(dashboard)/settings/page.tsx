@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo, type ReactNode } from 'react';
+import { Suspense, useMemo, useState, useEffect, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
@@ -49,13 +49,17 @@ function SettingsPageInner() {
   const { mode } = useTheme();
   const t = useTranslations('Settings');
 
-  // The URL (`?tab=`) is the single source of truth for the active
-  // section — deep-linkable, and it keeps the existing links in the
-  // app sidebar/header working. Legacy tab values (tags, custom-fields)
-  // resolve onto their new home; unknown/empty → the Overview landing.
-  const section = resolveSection(searchParams.get('tab'));
+  // Fast reactive local state initialized with URL tab param
+  const urlTab = searchParams.get('tab');
+  const [activeSection, setActiveSection] = useState<SettingsSection>(() => resolveSection(urlTab));
+
+  // Sync state whenever URL changes
+  useEffect(() => {
+    setActiveSection(resolveSection(searchParams.get('tab')));
+  }, [searchParams]);
 
   const go = (next: SettingsSection) => {
+    setActiveSection(next);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', next);
     router.replace(`/settings?${params.toString()}`, { scroll: false });
@@ -100,8 +104,8 @@ function SettingsPageInner() {
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
-        <SettingsRail active={section} onSelect={go} hints={hints} />
-        <div className="min-w-0">{panel[section]}</div>
+        <SettingsRail active={activeSection} onSelect={go} hints={hints} />
+        <div className="min-w-0">{panel[activeSection] || panel.overview}</div>
       </div>
     </div>
   );
