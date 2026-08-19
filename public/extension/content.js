@@ -1,23 +1,22 @@
 /**
  * WAPI CRM Extension Content Script
  * Injected into https://web.whatsapp.com
- * Supercharged Features:
- * 1. 0ms Fast Chat Detection & Draggable Floating Action Button
+ * Features:
+ * 1. Fast Contact Detection & Moveable Floating Action Button
  * 2. Visual Pipeline Stage & Deal Value Badges on WhatsApp Chat List
  * 3. Instant Pipeline Stage & Urgency Filter Bar above Chat List
- * 4. Quick Responses Engine with Direct Image/Document Media Injection
+ * 4. Quick Responses Engine with Direct Media Injection
  * 5. Collapsible "Today's Schedule & Follow-ups" Calendar Drawer
  */
 
 (function () {
-  console.log("[WAPI Extension] Supercharged content script initialized on WhatsApp Web");
+  console.log("[WAPI Extension] Content script initialized on WhatsApp Web");
 
   let activePhone = null;
   let panelIframe = null;
   let toggleBtn = null;
   let todayFab = null;
   let scheduleDrawer = null;
-  let quickPopup = null;
   let panelVisible = true;
   let debounceTimer = null;
 
@@ -33,31 +32,42 @@
   }
 
   // =================================================================
-  // 1. Fetch CRM Global Context (Badges, Filters, Schedule, Snippets)
+  // 1. Fetch CRM Global Context via chrome.storage.local
   // =================================================================
-  async function fetchGlobalContext() {
-    try {
-      const token = localStorage.getItem("wapi_auth_token") || "";
-      const res = await fetch("https://wapi.chat/api/extension/context", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      }).catch(() => null);
+  function fetchGlobalContext() {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(["wapiAuthToken", "wapiServerUrl"], async (items) => {
+        const token = items.wapiAuthToken || "";
+        const serverUrl = (items.wapiServerUrl || "https://wapi-blond.vercel.app").replace(/\/$/, "");
 
-      if (!res || !res.ok) return;
-      const data = await res.json().catch(() => ({}));
+        if (!token) return;
 
-      if (data.success) {
-        crmStages = data.stages || [];
-        crmAllDealsMap = data.all_deals_map || {};
-        crmTodayActivities = data.today_activities || [];
-        crmQuickReplies = data.quick_replies || [];
+        try {
+          const res = await fetch(`${serverUrl}/api/extension/context`, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }).catch(() => null);
 
-        updateTodayFab();
-        updateFilterBar();
-        injectBadgesIntoChatList();
-        renderScheduleDrawerContent();
-      }
-    } catch (e) {
-      console.warn("[WAPI] Fetch global context error:", e);
+          if (!res || !res.ok) return;
+          const data = await res.json().catch(() => ({}));
+
+          if (data.success) {
+            crmStages = data.stages || [];
+            crmAllDealsMap = data.all_deals_map || {};
+            crmTodayActivities = data.today_activities || [];
+            crmQuickReplies = data.quick_replies || [];
+
+            updateTodayFab();
+            updateFilterBar();
+            injectBadgesIntoChatList();
+            renderScheduleDrawerContent();
+          }
+        } catch (e) {
+          console.warn("[WAPI] Error fetching global context:", e);
+        }
+      });
     }
   }
 
@@ -176,17 +186,23 @@
   // 4. Visual Pipeline Badges on WhatsApp Web Chat Rows
   // =================================================================
   function injectBadgesIntoChatList() {
-    const chatRows = document.querySelectorAll("#pane-side div[role='listitem'], #pane-side div[tabindex='-1']");
+    const paneSide = document.querySelector("#pane-side");
+    if (!paneSide) return;
+
+    // Support multiple WhatsApp Web DOM representations
+    const chatRows = paneSide.querySelectorAll("div[role='listitem'], div[role='row'], div[tabindex='-1']");
     if (!chatRows || chatRows.length === 0) return;
 
     chatRows.forEach((row) => {
-      // Find contact title/name in row
+      // Find contact title span or heading
       const titleSpan = row.querySelector("span[title]") || row.querySelector("div[role='gridcell'] span");
       if (!titleSpan) return;
 
-      const titleText = titleSpan.getAttribute("title") || titleSpan.textContent || "";
+      const titleText = (titleSpan.getAttribute("title") || titleSpan.textContent || "").trim();
+      if (!titleText) return;
+
       const digits = cleanDigits(titleText);
-      const nameKey = titleText.trim().toLowerCase();
+      const nameKey = titleText.toLowerCase();
 
       const dealInfo = crmAllDealsMap[digits] || (digits.length >= 10 ? crmAllDealsMap[digits.slice(-10)] : null) || crmAllDealsMap[nameKey];
 
@@ -245,8 +261,6 @@
       paneSide.parentElement?.insertBefore(filterBar, paneSide);
     }
 
-    // Compute counts
-    const totalDeals = Object.keys(crmAllDealsMap).length;
     const dueCount = Object.values(crmAllDealsMap).filter((d) => d.is_due_today).length;
 
     let chipsHtml = `
@@ -286,7 +300,10 @@
   }
 
   function applyChatListFilter() {
-    const chatRows = document.querySelectorAll("#pane-side div[role='listitem'], #pane-side div[tabindex='-1']");
+    const paneSide = document.querySelector("#pane-side");
+    if (!paneSide) return;
+
+    const chatRows = paneSide.querySelectorAll("div[role='listitem'], div[role='row'], div[tabindex='-1']");
     if (!chatRows || chatRows.length === 0) return;
 
     chatRows.forEach((row) => {
@@ -298,9 +315,9 @@
       const titleSpan = row.querySelector("span[title]") || row.querySelector("div[role='gridcell'] span");
       if (!titleSpan) return;
 
-      const titleText = titleSpan.getAttribute("title") || titleSpan.textContent || "";
+      const titleText = (titleSpan.getAttribute("title") || titleSpan.textContent || "").trim();
       const digits = cleanDigits(titleText);
-      const nameKey = titleText.trim().toLowerCase();
+      const nameKey = titleText.toLowerCase();
 
       const dealInfo = crmAllDealsMap[digits] || (digits.length >= 10 ? crmAllDealsMap[digits.slice(-10)] : null) || crmAllDealsMap[nameKey];
 
@@ -354,7 +371,7 @@
         console.log("[WAPI] Injected file directly via Drop Event");
       }
 
-      // If caption text is provided, paste or insert into caption
+      // If caption text is provided, paste into caption
       if (captionText) {
         setTimeout(() => {
           const captionBox = document.querySelector("div[contenteditable='true'][role='textbox']");
@@ -525,10 +542,10 @@
         <line x1="8" y1="2" x2="8" y2="6"></line>
         <line x1="3" y1="10" x2="21" y2="10"></line>
       </svg>
-      <span>📅 ${count} Due Today</span>
+      <span>📅 ${count > 0 ? `${count} Due Today` : "Schedule & Agenda"}</span>
     `;
 
-    todayFab.style.display = count > 0 ? "flex" : "none";
+    todayFab.style.display = "flex";
   }
 
   function toggleScheduleDrawer() {
@@ -672,8 +689,9 @@
   function observeWhatsApp() {
     injectSidePanel();
     injectToggleButton();
+    updateTodayFab();
     attachChatListClickListener();
-    void fetchGlobalContext();
+    fetchGlobalContext();
 
     const observer = new MutationObserver(() => {
       attachChatListClickListener();
@@ -692,8 +710,8 @@
       attributes: false,
     });
 
-    // Periodically refresh global context every 45s
-    setInterval(fetchGlobalContext, 45000);
+    // Refresh context periodically
+    setInterval(fetchGlobalContext, 30000);
   }
 
   // Handle messages from panel iframe
@@ -705,8 +723,16 @@
         notifyPanel(contact);
       }
     }
-    if (event.data && event.data.type === "WAPI_REFRESH_CONTEXT") {
-      void fetchGlobalContext();
+    if (event.data && event.data.type === "WAPI_CONTEXT_UPDATED") {
+      crmStages = event.data.stages || [];
+      crmAllDealsMap = event.data.all_deals_map || {};
+      crmTodayActivities = event.data.today_activities || [];
+      crmQuickReplies = event.data.quick_replies || [];
+
+      updateTodayFab();
+      updateFilterBar();
+      injectBadgesIntoChatList();
+      renderScheduleDrawerContent();
     }
   });
 

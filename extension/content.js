@@ -1,16 +1,17 @@
 /**
  * WAPI CRM Extension Content Script
  * Injected into https://web.whatsapp.com
- * Features:
- * 1. Fast Contact Detection & Moveable Floating Action Button
- * 2. Visual Pipeline Stage & Deal Value Badges on WhatsApp Chat List
- * 3. Instant Pipeline Stage & Urgency Filter Bar above Chat List
+ *
+ * Supercharged & Ultra-Optimized (Zero Freeze / Zero Loop Engine):
+ * 1. Safe Throttled Mutation & Contact Detector (100% CPU friendly)
+ * 2. Visual Pipeline Stage & Deal Value Badges on Chat List (With Idempotent DOM Check)
+ * 3. Pipeline Stage & Urgency Filter Bar above Chat List
  * 4. Quick Responses Engine with Direct Media Injection
  * 5. Collapsible "Today's Schedule & Follow-ups" Calendar Drawer
  */
 
 (function () {
-  console.log("[WAPI Extension] Content script initialized on WhatsApp Web");
+  console.log("[WAPI Extension] Fast & Safe Content Script Loaded on WhatsApp Web");
 
   let activePhone = null;
   let panelIframe = null;
@@ -18,7 +19,6 @@
   let todayFab = null;
   let scheduleDrawer = null;
   let panelVisible = true;
-  let debounceTimer = null;
 
   // Cached CRM Data
   let crmStages = [];
@@ -26,6 +26,11 @@
   let crmTodayActivities = [];
   let crmQuickReplies = [];
   let activeFilterStage = "ALL";
+
+  // Debounce & throttling timers to prevent ANY UI freezing or mutation loops
+  let isUpdatingBadges = false;
+  let badgeScanTimer = null;
+  let contactScanTimer = null;
 
   function cleanDigits(str) {
     return (str || "").replace(/\D/g, "");
@@ -61,7 +66,7 @@
 
             updateTodayFab();
             updateFilterBar();
-            injectBadgesIntoChatList();
+            scheduleBadgeScan();
             renderScheduleDrawerContent();
           }
         } catch (e) {
@@ -183,67 +188,85 @@
   }
 
   // =================================================================
-  // 4. Visual Pipeline Badges on WhatsApp Web Chat Rows
+  // 4. Safe Visual Pipeline Badges on WhatsApp Web Chat Rows (IDEMPOTENT)
   // =================================================================
+  function scheduleBadgeScan() {
+    if (badgeScanTimer) clearTimeout(badgeScanTimer);
+    badgeScanTimer = setTimeout(injectBadgesIntoChatList, 250);
+  }
+
   function injectBadgesIntoChatList() {
-    const paneSide = document.querySelector("#pane-side");
-    if (!paneSide) return;
+    if (isUpdatingBadges) return;
+    isUpdatingBadges = true;
 
-    // Support multiple WhatsApp Web DOM representations
-    const chatRows = paneSide.querySelectorAll("div[role='listitem'], div[role='row'], div[tabindex='-1']");
-    if (!chatRows || chatRows.length === 0) return;
+    try {
+      const paneSide = document.querySelector("#pane-side");
+      if (!paneSide) return;
 
-    chatRows.forEach((row) => {
-      // Find contact title span or heading
-      const titleSpan = row.querySelector("span[title]") || row.querySelector("div[role='gridcell'] span");
-      if (!titleSpan) return;
+      const chatRows = paneSide.querySelectorAll("div[role='listitem'], div[role='row'], div[tabindex='-1']");
+      if (!chatRows || chatRows.length === 0) return;
 
-      const titleText = (titleSpan.getAttribute("title") || titleSpan.textContent || "").trim();
-      if (!titleText) return;
+      chatRows.forEach((row) => {
+        const titleSpan = row.querySelector("span[title]") || row.querySelector("div[role='gridcell'] span");
+        if (!titleSpan) return;
 
-      const digits = cleanDigits(titleText);
-      const nameKey = titleText.toLowerCase();
+        const titleText = (titleSpan.getAttribute("title") || titleSpan.textContent || "").trim();
+        if (!titleText) return;
 
-      const dealInfo = crmAllDealsMap[digits] || (digits.length >= 10 ? crmAllDealsMap[digits.slice(-10)] : null) || crmAllDealsMap[nameKey];
+        const digits = cleanDigits(titleText);
+        const nameKey = titleText.toLowerCase();
 
-      // Remove existing badge container if present
-      const existing = row.querySelector(".wapi-badge-container");
-      if (existing) existing.remove();
+        const dealInfo = crmAllDealsMap[digits] || (digits.length >= 10 ? crmAllDealsMap[digits.slice(-10)] : null) || crmAllDealsMap[nameKey];
 
-      if (dealInfo) {
-        const badgeContainer = document.createElement("span");
-        badgeContainer.className = "wapi-badge-container";
+        const targetKey = dealInfo ? `${dealInfo.deal_id}_${dealInfo.stage_name}_${dealInfo.value}_${dealInfo.is_due_today}` : "NONE";
+        const currentKey = row.getAttribute("data-wapi-state");
 
-        // 1. Stage Badge
-        const stageBadge = document.createElement("span");
-        stageBadge.className = "wapi-chat-badge";
-        stageBadge.textContent = dealInfo.stage_name;
-        stageBadge.style.backgroundColor = `${dealInfo.stage_color || "#10b981"}25`;
-        stageBadge.style.color = dealInfo.stage_color || "#10b981";
-        stageBadge.style.border = `1px solid ${dealInfo.stage_color || "#10b981"}50`;
-        badgeContainer.appendChild(stageBadge);
+        // If badge state is already applied and up-to-date, DO NOT TOUCH DOM!
+        if (currentKey === targetKey) return;
+        row.setAttribute("data-wapi-state", targetKey);
 
-        // 2. Value Badge (if > 0)
-        if (dealInfo.value > 0) {
-          const valBadge = document.createElement("span");
-          valBadge.className = "wapi-value-badge";
-          valBadge.textContent = `${dealInfo.currency === "USD" ? "$" : dealInfo.currency + " "}${Number(dealInfo.value).toLocaleString()}`;
-          badgeContainer.appendChild(valBadge);
+        const existing = row.querySelector(".wapi-badge-container");
+        if (existing) existing.remove();
+
+        if (dealInfo) {
+          const badgeContainer = document.createElement("span");
+          badgeContainer.className = "wapi-badge-container";
+
+          // 1. Stage Badge
+          const stageBadge = document.createElement("span");
+          stageBadge.className = "wapi-chat-badge";
+          stageBadge.textContent = dealInfo.stage_name;
+          stageBadge.style.backgroundColor = `${dealInfo.stage_color || "#10b981"}25`;
+          stageBadge.style.color = dealInfo.stage_color || "#10b981";
+          stageBadge.style.border = `1px solid ${dealInfo.stage_color || "#10b981"}50`;
+          badgeContainer.appendChild(stageBadge);
+
+          // 2. Value Badge (if > 0)
+          if (dealInfo.value > 0) {
+            const valBadge = document.createElement("span");
+            valBadge.className = "wapi-value-badge";
+            valBadge.textContent = `${dealInfo.currency === "USD" ? "$" : dealInfo.currency + " "}${Number(dealInfo.value).toLocaleString()}`;
+            badgeContainer.appendChild(valBadge);
+          }
+
+          // 3. Urgency / Due Today Badge
+          if (dealInfo.is_due_today) {
+            const dueBadge = document.createElement("span");
+            dueBadge.className = "wapi-due-badge";
+            dueBadge.textContent = "🔥 Due Today";
+            badgeContainer.appendChild(dueBadge);
+          }
+
+          titleSpan.parentElement?.appendChild(badgeContainer);
         }
+      });
 
-        // 3. Urgency / Due Today Badge
-        if (dealInfo.is_due_today) {
-          const dueBadge = document.createElement("span");
-          dueBadge.className = "wapi-due-badge";
-          dueBadge.textContent = "🔥 Due Today";
-          badgeContainer.appendChild(dueBadge);
-        }
-
-        titleSpan.parentElement?.appendChild(badgeContainer);
-      }
-    });
-
-    applyChatListFilter();
+      applyChatListFilter();
+    } catch (err) {
+      console.warn("[WAPI] Badge injection error:", err);
+    } finally {
+      isUpdatingBadges = false;
+    }
   }
 
   // =================================================================
@@ -621,7 +644,7 @@
   }
 
   // =================================================================
-  // 9. Extract Active Contact & Mutation Observer
+  // 9. Extract Active Contact & Throttled Observer
   // =================================================================
   function extractActiveContact() {
     try {
@@ -678,8 +701,8 @@
       paneSide.addEventListener(
         "click",
         () => {
-          setTimeout(checkAndNotify, 30);
-          setTimeout(checkAndNotify, 150);
+          setTimeout(checkAndNotify, 40);
+          setTimeout(checkAndNotify, 200);
         },
         true
       );
@@ -693,25 +716,42 @@
     attachChatListClickListener();
     fetchGlobalContext();
 
-    const observer = new MutationObserver(() => {
-      attachChatListClickListener();
-      injectBadgesIntoChatList();
-      injectQuickResponseButton();
+    // Observe ONLY specific containers with strict debouncing (NO full body observe)
+    const observer = new MutationObserver((mutations) => {
+      // Ignore mutations created by our own injected elements
+      let hasExternalMutations = false;
+      for (const m of mutations) {
+        if (
+          m.target &&
+          typeof m.target.className === "string" &&
+          m.target.className.includes("wapi-")
+        ) {
+          continue;
+        }
+        hasExternalMutations = true;
+        break;
+      }
 
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
+      if (!hasExternalMutations) return;
+
+      attachChatListClickListener();
+      scheduleBadgeScan();
+
+      if (contactScanTimer) clearTimeout(contactScanTimer);
+      contactScanTimer = setTimeout(() => {
         checkAndNotify();
-      }, 60);
+      }, 120);
     });
 
-    observer.observe(document.body, {
+    const appRoot = document.getElementById("app") || document.body;
+    observer.observe(appRoot, {
       childList: true,
       subtree: true,
       attributes: false,
     });
 
-    // Refresh context periodically
-    setInterval(fetchGlobalContext, 30000);
+    // Refresh context periodically every 45s
+    setInterval(fetchGlobalContext, 45000);
   }
 
   // Handle messages from panel iframe
@@ -731,7 +771,7 @@
 
       updateTodayFab();
       updateFilterBar();
-      injectBadgesIntoChatList();
+      scheduleBadgeScan();
       renderScheduleDrawerContent();
     }
   });

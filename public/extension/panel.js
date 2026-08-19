@@ -481,6 +481,20 @@ async function fetchCrmContext(phone, name, useCache = true) {
       });
     }
 
+    // Broadcast global context to content script on WhatsApp Web
+    try {
+      window.parent.postMessage(
+        {
+          type: "WAPI_CONTEXT_UPDATED",
+          stages: stagesList,
+          all_deals_map: data.all_deals_map || {},
+          today_activities: data.today_activities || [],
+          quick_replies: data.quick_replies || [],
+        },
+        "*"
+      );
+    } catch (e) {}
+
     // Refresh UI with verified server state
     renderContactHeader(currentContact, currentName, currentPhone);
     renderOffers(currentDeals);
